@@ -1,4 +1,5 @@
-"""Hypothesis strategies."""
+"""Hypothesis strategies for parameters."""
+
 import random
 
 import hypothesis.strategies as st

@@ -4,7 +4,7 @@ from hypothesis import given
 
 from baybe.parameters.base import Parameter
 
-from ..hypothesis_strategies import parameter
+from ..hypothesis_strategies.parameters import parameter
 
 
 @given(parameter)
