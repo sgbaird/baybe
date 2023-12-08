@@ -3,7 +3,6 @@
 import random
 
 import hypothesis.strategies as st
-import numpy as np
 from hypothesis import assume
 from hypothesis.extra.pandas import columns, data_frames
 
@@ -21,13 +20,7 @@ from baybe.parameters.numerical import (
 from baybe.parameters.substance import SubstanceEncoding, SubstanceParameter
 from baybe.utils import DTypeFloatNumpy
 
-_largest_lower_interval = np.nextafter(
-    np.nextafter(np.inf, 0, dtype=DTypeFloatNumpy), 0, dtype=DTypeFloatNumpy
-)
-"""
-The largest possible value for the lower end of a continuous interval such that there
-still exists a larger but finite number for the upper interval end.
-"""
+from .utils import interval
 
 _decorrelate = st.one_of(
     st.booleans(),
@@ -102,9 +95,8 @@ def numerical_discrete_parameter(
 def numerical_continuous_parameter(draw: st.DrawFn):
     """Generate class:`baybe.parameters.numerical.NumericalContinuousParameter`."""
     name = draw(parameter_name)
-    lower = draw(st.floats(max_value=_largest_lower_interval, allow_infinity=False))
-    upper = draw(st.floats(min_value=lower, exclude_min=True, allow_infinity=False))
-    return NumericalContinuousParameter(name=name, bounds=(lower, upper))
+    bounds = draw(interval(exclude_half_open=True, exclude_open=True))
+    return NumericalContinuousParameter(name=name, bounds=bounds)
 
 
 @st.composite
