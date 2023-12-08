@@ -86,9 +86,9 @@ class NumericalTarget(Target, SerialMixin):
         """Validate the bounds.
 
         Raises:
-            ValueError: If the bounds are finite on one and infinite on the other end.
+            ValueError: If the bounds are half-open.
             ValueError: If the target is in ``MATCH`` mode but the provided bounds
-                are infinite.
+                are not closed.
         """
         # IMPROVE: We could also include half-way bounds, which however don't work
         # for the desirability approach
