@@ -1,8 +1,10 @@
 """Base classes for all parameters."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from functools import cached_property, partial
-from typing import Any, ClassVar, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Optional
 
 import pandas as pd
 from attrs import define, field
@@ -12,6 +14,9 @@ from cattrs.gen import override
 from baybe.parameters.enum import ParameterEncoding
 from baybe.utils import SerialMixin, get_base_structure_hook, unstructure_base
 from baybe.utils.serialization import converter
+
+if TYPE_CHECKING:
+    from baybe.searchspace import SearchSpace
 
 # TODO: Reactive slots in all classes once cached_property is supported:
 #   https://github.com/python-attrs/attrs/issues/164
@@ -35,6 +40,12 @@ class Parameter(ABC, SerialMixin):
     # object variables
     name: str = field(validator=(instance_of(str), min_len(1)))
     """The name of the parameter"""
+
+    def to_searchspace(self) -> SearchSpace:
+        """Create a one-dimensional search space spanned by the parameter values."""
+        from baybe.searchspace import SearchSpace
+
+        return SearchSpace.from_product(parameters=[self])
 
     @abstractmethod
     def is_in_range(self, item: Any) -> bool:

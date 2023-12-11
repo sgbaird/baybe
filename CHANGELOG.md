@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mypy` for targets and intervals
 - `hypothesis` strategies and tests for targets and intervals
 - De-/serialization of target subclasses via base class
+- `to_searchspace` convenience constructor in `Parameter` class
 
 ### Changed
 - Renamed `bounds_transform_func` target attribute to `transform_mode`
