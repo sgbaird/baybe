@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix orders of examples in table of content
 - `DiscreteCustomConstraint` validator now expects data frame instead of series
 - `ignore_example` flag builds but does not execute examples when building documentation
+- New version of campaign user guide and basic example
+- BoTorch dependency bumped to `>=0.9.0`
 
 ### Fixed
 - Wrong use of `tolerance` argument in constraints user guide
@@ -33,13 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Conda install instructions and version badge
 - Early fail for different Python versions in regular pipeline
+- Workaround for BoTorch hybrid recommender data type
 
 ### Deprecations
 - `Interval.is_finite` replaced with `Interval.is_bounded`
 - Specifying target configs without explicit type information is deprecated
-
-### Changed
-- New version of campaign user guide and basic example
+- Python 3.8 no longer supported
 
 ## [0.7.1] - 2023-12-07
 ### Added
