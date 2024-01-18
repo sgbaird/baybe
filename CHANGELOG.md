@@ -24,7 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ignore_example` flag builds but does not execute examples when building documentation
 - `baybe.utils.chemistry` is now dynamically imported in `SubstanceParameter`
 - New user guide versions for campaigns, targets and objectives
-- `baybe.utils.chemistry` is now dynamically imported in `SubstanceParameter`
 - Added a method for lazy loading modules or attributes
 
 ### Fixed
