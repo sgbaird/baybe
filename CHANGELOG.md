@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DiscreteCustomConstraint` validator now expects data frame instead of series
 - `ignore_example` flag builds but does not execute examples when building documentation
 - `baybe.utils.chemistry` is now dynamically imported in `SubstanceParameter`
+- Added a method for lazy loading modules or attributes
 
 ### Fixed
 - Wrong use of `tolerance` argument in constraints user guide
