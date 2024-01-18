@@ -36,11 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Conda install instructions and version badge
 - Early fail for different Python versions in regular pipeline
 - Workaround for BoTorch hybrid recommender data type
+- Support for Python 3.8
 
 ### Deprecations
 - `Interval.is_finite` replaced with `Interval.is_bounded`
 - Specifying target configs without explicit type information is deprecated
-- Python 3.8 no longer supported
 
 ## [0.7.1] - 2023-12-07
 ### Added
