@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `baybe.utils.chemistry` is now dynamically imported in `SubstanceParameter`
 - New user guide versions for campaigns, targets and objectives
 - Added a method for lazy loading modules or attributes
+- New user guide versions for campaigns, targets and objectives
 
 ### Fixed
 - Wrong use of `tolerance` argument in constraints user guide
