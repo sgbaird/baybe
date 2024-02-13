@@ -1,0 +1,24 @@
+attrs>=22.2.0
+botorch>=0.8.1
+cattrs>=23.2.0
+exceptiongroup
+funcy>=1.17
+gpytorch>=1.9.1
+ngboost>=0.3.12
+numpy>=1.24.1
+pandas>=1.4.2
+protobuf<=3.20.3
+scikit-learn>=1.1.1
+scikit-learn-extra>=0.3.0
+scipy>=1.10.1
+setuptools-scm>=7.1.0
+torch>=1.11.0
+baybe[telemetry]
+baybe[examples] # docs cannot be built without running examples
+furo>=2023.09.10
+jupyter>=1.0.0
+jupytext>=1.16.1
+myst-parser>=2.0.0
+sphinx>=7.1.1
+sphinx-autodoc-typehints>=1.24.0
+sphinx-copybutton==0.5.2
