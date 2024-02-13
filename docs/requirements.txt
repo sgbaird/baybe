@@ -13,8 +13,7 @@ scikit-learn-extra>=0.3.0
 scipy>=1.10.1
 setuptools-scm>=7.1.0
 torch>=1.11.0
-baybe[telemetry]
-baybe[examples] # docs cannot be built without running examples
+-e ../.[telemetry,examples]
 furo>=2023.09.10
 jupyter>=1.0.0
 jupytext>=1.16.1
