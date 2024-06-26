@@ -4,16 +4,13 @@ from contextlib import nullcontext
 import pytest
 
 from baybe import Campaign
-from baybe.exceptions import ModelParamsNotSupportedError
-from baybe.surrogates import _ONNX_INSTALLED, register_custom_architecture
+from baybe._optional.info import ONNX_INSTALLED
+from baybe.surrogates import CustomONNXSurrogate, register_custom_architecture
 from tests.conftest import run_iterations
-
-if _ONNX_INSTALLED:
-    from baybe.surrogates import CustomONNXSurrogate
 
 
 @pytest.mark.skipif(
-    not _ONNX_INSTALLED, reason="Optional onnx dependency not installed."
+    not ONNX_INSTALLED, reason="Optional onnx dependency not installed."
 )
 def test_invalid_onnx_creation(onnx_str):
     """Invalid onnx model creation."""
@@ -29,17 +26,9 @@ def test_invalid_onnx_creation(onnx_str):
     with pytest.raises(TypeError):
         CustomONNXSurrogate(onnx_input_name="input")
 
-    # Scenario: Model Params non-empty
-    with pytest.raises(ModelParamsNotSupportedError):
-        CustomONNXSurrogate(
-            onnx_input_name="input",
-            onnx_str=onnx_str,
-            model_params={"Non_empty_dict": None},
-        )
-
 
 @pytest.mark.skipif(
-    not _ONNX_INSTALLED, reason="Optional onnx dependency not installed."
+    not ONNX_INSTALLED, reason="Optional onnx dependency not installed."
 )
 def test_invalid_onnx_str():
     """Invalid onnx string causes error."""
@@ -48,7 +37,7 @@ def test_invalid_onnx_str():
 
 
 @pytest.mark.skipif(
-    not _ONNX_INSTALLED, reason="Optional onnx dependency not installed."
+    not ONNX_INSTALLED, reason="Optional onnx dependency not installed."
 )
 @pytest.mark.parametrize("surrogate_model", ["onnx"], indirect=True)
 @pytest.mark.parametrize(
@@ -67,7 +56,7 @@ def test_validate_architectures():
     """Test architecture class validation."""
     # Scenario: Empty Class
     with pytest.raises(ValueError):
-        register_custom_architecture()(type("EmptyArch"))
+        register_custom_architecture()(str)
 
     # Scenario: Class with just `_fit`
     with pytest.raises(ValueError):

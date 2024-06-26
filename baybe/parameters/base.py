@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from functools import cached_property, partial
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 import pandas as pd
 from attrs import define, field
@@ -30,11 +30,8 @@ class Parameter(ABC, SerialMixin):
     """
 
     # class variables
-    is_numeric: ClassVar[bool]
+    is_numerical: ClassVar[bool]
     """Class variable encoding whether this parameter is numeric."""
-
-    is_discrete: ClassVar[bool]
-    """Class variable encoding whether this parameter is discrete."""
 
     # object variables
     name: str = field(validator=(instance_of(str), min_len(1)))
@@ -51,6 +48,23 @@ class Parameter(ABC, SerialMixin):
             ``True`` if the item is within the parameter range, ``False`` otherwise.
         """
 
+    @abstractmethod
+    def summary(self) -> dict:
+        """Return a custom summarization of the parameter."""
+
+    def __str__(self) -> str:
+        return str(self.summary())
+
+    @property
+    def is_continuous(self) -> bool:
+        """Boolean indicating if this is a continuous parameter."""
+        return isinstance(self, ContinuousParameter)
+
+    @property
+    def is_discrete(self) -> bool:
+        """Boolean indicating if this is a discrete parameter."""
+        return isinstance(self, DiscreteParameter)
+
 
 @define(frozen=True, slots=False)
 class DiscreteParameter(Parameter, ABC):
@@ -59,11 +73,8 @@ class DiscreteParameter(Parameter, ABC):
     # TODO [15280]: needs to be refactored
 
     # class variables
-    is_discrete: ClassVar[bool] = True
-    # See base class.
-
-    encoding: Optional[ParameterEncoding] = field(init=False, default=None)
-    """An optional encoding strategy for the parameter."""
+    encoding: ParameterEncoding | None = field(init=False, default=None)
+    """An optional encoding for the parameter."""
 
     @property
     @abstractmethod
@@ -102,17 +113,32 @@ class DiscreteParameter(Parameter, ABC):
 
         return transformed
 
+    def summary(self) -> dict:  # noqa: D102
+        # See base class.
+        param_dict = dict(
+            Name=self.name,
+            Type=self.__class__.__name__,
+            Num_Values=len(self.values),
+            Encoding=self.encoding,
+        )
+        return param_dict
+
+
+@define(frozen=True, slots=False)
+class ContinuousParameter(Parameter):
+    """Abstract class for continuous parameters."""
+
 
 # Register (un-)structure hooks
-overrides = {
+_overrides = {
     "_values": override(rename="values"),
     "decorrelate": override(struct_hook=lambda x, _: x),
 }
 # FIXME[typing]: https://github.com/python/mypy/issues/4717
 converter.register_structure_hook(
     Parameter,
-    get_base_structure_hook(Parameter, overrides=overrides),  # type: ignore
+    get_base_structure_hook(Parameter, overrides=_overrides),  # type: ignore
 )
 converter.register_unstructure_hook(
-    Parameter, partial(unstructure_base, overrides=overrides)
+    Parameter, partial(unstructure_base, overrides=_overrides)
 )

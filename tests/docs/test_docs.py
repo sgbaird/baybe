@@ -6,22 +6,22 @@ from tempfile import NamedTemporaryFile
 
 import pytest
 
-from baybe.recommenders import RandomRecommender
-from baybe.strategies import TwoPhaseStrategy
+from baybe._optional.info import CHEM_INSTALLED, LINT_INSTALLED
+from baybe.recommenders import RandomRecommender, TwoPhaseMetaRecommender
 
-from ..conftest import _CHEM_INSTALLED
 from .utils import extract_code_blocks
 
-doc_files = ["README.md", *Path("docs/userguide/").rglob("*.md")]
+doc_files = list(map(str, [Path("README.md"), *Path("docs/userguide/").rglob("*.md")]))
 """Files whose code blocks are to be checked."""
-doc_files_pseudocode = [Path("docs/userguide/campaigns.md")]
-"""Files which contain pseudocode that needs to be checked using fixtures."""
+
+doc_files_pseudocode = list(map(str, [Path("docs/userguide/campaigns.md")]))
+"""Files containing pseudocode that needs to be checked with injected fixtures."""
 
 
 @pytest.mark.skipif(
-    not _CHEM_INSTALLED, reason="Optional chem dependency not installed."
+    not CHEM_INSTALLED, reason="Optional chem dependency not installed."
 )
-@pytest.mark.parametrize("file", doc_files)
+@pytest.mark.parametrize("file", doc_files, ids=doc_files)
 def test_code_executability(file: Path):
     """The code blocks in the file become a valid python script when concatenated.
 
@@ -32,30 +32,30 @@ def test_code_executability(file: Path):
 
 
 # TODO: Needs a refactoring (files codeblocks should be auto-detected)
-@pytest.mark.parametrize("file", doc_files_pseudocode)
+@pytest.mark.parametrize("file", doc_files_pseudocode, ids=doc_files_pseudocode)
 @pytest.mark.parametrize(
-    "strategy",
+    "recommender",
     [
-        TwoPhaseStrategy(
+        TwoPhaseMetaRecommender(
             initial_recommender=RandomRecommender(), recommender=RandomRecommender()
         )
     ],
 )
-@pytest.mark.parametrize("boolean", [True, False])
-def test_pseudocode_executability(
-    file: Path, searchspace, objective, strategy, boolean
-):
+def test_pseudocode_executability(file: Path, searchspace, objective, recommender):
     """The pseudocode blocks in the file are a valid python script when using fixtures.
 
     Blocks surrounded with "triple-backticks" are included.
-    Due to a bug related to the serialization of the default strategy, this currently
-    uses a non-default strategy.
+    Due to a bug related to the serialization of the default recommender, this currently
+    uses a non-default recommender.
     """
     userguide_pseudocode = "\n".join(extract_code_blocks(file, include_tilde=True))
     exec(userguide_pseudocode)
 
 
-@pytest.mark.parametrize("file", doc_files)
+@pytest.mark.skipif(
+    not LINT_INSTALLED, reason="Optional lint dependency not installed."
+)
+@pytest.mark.parametrize("file", doc_files, ids=doc_files)
 def test_code_format(file: Path):
     """The code blocks in the file are properly formatted.
 

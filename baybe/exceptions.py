@@ -30,14 +30,10 @@ class NothingToSimulateError(Exception):
     """There is nothing to simulate because there are no testable configurations."""
 
 
-# TODO: This exception class is needed only temporarily in `CustomONNXSurrogate` until
-#   the use of `model_params` has be refactored.
-class ModelParamsNotSupportedError(Exception):
-    """The class does not support any model parameters."""
-
-
 class NoRecommendersLeftError(Exception):
-    """A recommender is requested by a strategy but there are no recommenders left."""
+    """A recommender is requested by a meta recommender but there are no recommenders
+    left.
+    """
 
 
 class NumericalUnderflowError(Exception):
@@ -50,3 +46,7 @@ class OptionalImportError(Exception):
 
 class DeprecationError(Exception):
     """Signals the use of a deprecated mechanism to the user, interrupting execution."""
+
+
+class UnidentifiedSubclassError(Exception):
+    """A specified subclass cannot be found in the given class hierarchy."""

@@ -1,6 +1,6 @@
 # NOTES:
 # - The map syntax used for matrix is flagged red but actually works
-# - This runs everything in Python 3.8, 3.9, 3.10 and 3.11
+# - This runs everything in Python 3.10, 3.11 and 3.12
 # - No environments are cached due to space limit
 
 name: Regular Checks
@@ -20,6 +20,16 @@ concurrency:
 
 jobs:
 
+  reminder:
+    runs-on: ubuntu-latest
+    name: "Reminder"
+    continue-on-error: true
+    permissions:
+      issues: write
+    steps:
+      - name: check reminders and notify
+        uses: agrc/reminder-action@v1
+
   # Warns about broken links in the docs. Especially useful for
   # those that point to our own github.io page (linkcheck is disabled in the
   # CI pipeline, because the respective pages are yet to be created at that time).
@@ -30,17 +40,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11"}
+        with: {python-version: "3.10"}
       - name: Build Docs
         run: |
-          pip install tox
-          tox -e docs-py311
+          pip install tox-uv
+          tox -e docs-py310 -- -r
 
   lint:
     strategy:
       fail-fast: false
       matrix:
-        py-version: [ {semantic: '3.8', tox: 'py38'}, {semantic: '3.9', tox: 'py39'}, {semantic: '3.10', tox: 'py310'}, {semantic: '3.11', tox: 'py311'} ]
+        py-version: [ {semantic: '3.10', tox: 'py310'},
+                      {semantic: '3.11', tox: 'py311'},
+                      {semantic: '3.12', tox: 'py312'} ]
     name: Lint ${{ matrix.py-version.semantic }}
     runs-on: ubuntu-latest
     steps:
@@ -51,7 +63,7 @@ jobs:
           python-version: ${{ matrix.py-version.semantic }}
       - name: Run linting
         run: |
-          pip install tox
+          pip install tox-uv
           tox -e lint-${{ matrix.py-version.tox }}
 
   typecheck:
@@ -59,7 +71,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        py-version: [ {semantic: '3.8', tox: 'py38'}, {semantic: '3.9', tox: 'py39'}, {semantic: '3.10', tox: 'py310'}, {semantic: '3.11', tox: 'py311'} ]
+        py-version: [ {semantic: '3.10', tox: 'py310'},
+                      {semantic: '3.11', tox: 'py311'},
+                      {semantic: '3.12', tox: 'py312'} ]
     name: Type Check ${{ matrix.py-version.semantic }}
     runs-on: ubuntu-latest
     steps:
@@ -70,7 +84,7 @@ jobs:
           python-version: ${{ matrix.py-version.semantic }}
       - name: Run type check
         run: |
-          pip install tox
+          pip install tox-uv
           tox -e mypy-${{ matrix.py-version.tox }}
 
   audit:
@@ -78,7 +92,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        py-version: [ {semantic: '3.8', tox: 'py38'}, {semantic: '3.9', tox: 'py39'}, {semantic: '3.10', tox: 'py310'}, {semantic: '3.11', tox: 'py311'} ]
+        py-version: [ {semantic: '3.10', tox: 'py310'},
+                      {semantic: '3.11', tox: 'py311'},
+                      {semantic: '3.12', tox: 'py312'} ]
     name: Audit ${{ matrix.py-version.semantic }}
     runs-on: ubuntu-latest
     steps:
@@ -89,7 +105,7 @@ jobs:
           python-version: ${{ matrix.py-version.semantic }}
       - name: Run pip-audit
         run: |
-          pip install tox
+          pip install tox-uv
           tox -e audit-${{ matrix.py-version.tox }}
 
   coretest:
@@ -97,7 +113,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        py-version: [ {semantic: '3.8', tox: 'py38'}, {semantic: '3.9', tox: 'py39'}, {semantic: '3.10', tox: 'py310'}, {semantic: '3.11', tox: 'py311'} ]
+        py-version: [ {semantic: '3.10', tox: 'py310'},
+                      {semantic: '3.11', tox: 'py311'},
+                      {semantic: '3.12', tox: 'py312'} ]
     name: Core Tests ${{ matrix.py-version.semantic }}
     runs-on: ubuntu-latest
     steps:
@@ -106,13 +124,9 @@ jobs:
         id: setup-python
         with:
           python-version: ${{ matrix.py-version.semantic }}
-      - uses: actions/cache@v4
-        with:
-          path: .tox/coretest-${{ matrix.py-version.tox }}
-          key: coretest-${{ matrix.py-version.tox }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('tox.ini') }}
       - name: Run core tests
         run: |
-          pip install tox
+          pip install tox-uv
           tox -e coretest-${{ matrix.py-version.tox }}
 
   fulltest:
@@ -120,7 +134,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        py-version: [ {semantic: '3.8', tox: 'py38'}, {semantic: '3.9', tox: 'py39'}, {semantic: '3.10', tox: 'py310'}, {semantic: '3.11', tox: 'py311'} ]
+        py-version: [ {semantic: '3.10', tox: 'py310'},
+                      {semantic: '3.11', tox: 'py311'},
+                      {semantic: '3.12', tox: 'py312'} ]
     name: Full Tests ${{ matrix.py-version.semantic }}
     runs-on: ubuntu-latest
     steps:
@@ -135,7 +151,7 @@ jobs:
           key: fulltest-${{ matrix.py-version.tox }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('tox.ini') }}
       - name: Run full tests
         run: |
-          pip install tox
+          pip install tox-uv
           tox -e fulltest-${{ matrix.py-version.tox }} -- --cov-report=xml
       - name: "Assert Overall Coverage"
         run: |

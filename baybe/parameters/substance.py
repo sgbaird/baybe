@@ -1,7 +1,7 @@
 """Substance parameters."""
 
 from functools import cached_property
-from typing import Any, ClassVar, Dict, Union
+from typing import Any, ClassVar
 
 import pandas as pd
 from attrs import define, field
@@ -35,11 +35,11 @@ class SubstanceParameter(DiscreteParameter):
     """
 
     # class variables
-    is_numeric: ClassVar[bool] = False
+    is_numerical: ClassVar[bool] = False
     # See base class.
 
     # object variables
-    data: Dict[str, Smiles] = field(
+    data: dict[str, Smiles] = field(
         validator=deep_mapping(
             mapping_validator=min_len(2),
             # FIXME[typing]: https://github.com/python-attrs/attrs/issues/1206
@@ -49,9 +49,7 @@ class SubstanceParameter(DiscreteParameter):
     )
     """A mapping that provides the SMILES strings for all available parameter values."""
 
-    decorrelate: Union[bool, float] = field(
-        default=True, validator=validate_decorrelation
-    )
+    decorrelate: bool | float = field(default=True, validator=validate_decorrelation)
     """Specifies the used decorrelation mode for the parameter encoding.
 
         - ``False``: The encoding is used as is.
@@ -66,7 +64,7 @@ class SubstanceParameter(DiscreteParameter):
 
     @data.validator
     def _validate_substance_data(  # noqa: DOC101, DOC103
-        self, _: Any, data: Dict[str, Smiles]
+        self, _: Any, data: dict[str, Smiles]
     ) -> None:
         """Validate that the substance data, provided as SMILES, is valid.
 
@@ -108,8 +106,6 @@ class SubstanceParameter(DiscreteParameter):
     @property
     def values(self) -> tuple:
         """Returns the labels of the given set of molecules."""
-        # Since the order of dictionary keys is important here, this will only work
-        # for Python 3.7 or higher
         return tuple(self.data.keys())
 
     @cached_property

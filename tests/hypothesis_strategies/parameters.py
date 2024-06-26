@@ -1,6 +1,5 @@
 """Hypothesis strategies for parameters."""
 
-from typing import Optional
 
 import hypothesis.strategies as st
 import numpy as np
@@ -19,15 +18,16 @@ from baybe.parameters.numerical import (
 from baybe.parameters.substance import SubstanceEncoding, SubstanceParameter
 from baybe.utils.numerical import DTypeFloatNumpy
 
-from .utils import interval
+from ..hypothesis_strategies.basic import finite_floats
+from .utils import intervals
 
-decorrelation = st.one_of(
+decorrelations = st.one_of(
     st.booleans(),
-    st.floats(min_value=0.0, max_value=1.0, exclude_min=True, exclude_max=True),
+    finite_floats(min_value=0.0, max_value=1.0, exclude_min=True, exclude_max=True),
 )
 """A strategy that generates decorrelation settings."""
 
-parameter_name = st.text(min_size=1)
+parameter_names = st.text(min_size=1)
 """A strategy that generates parameter names."""
 
 categories = st.lists(st.text(min_size=1), min_size=2, unique=True)
@@ -68,7 +68,7 @@ def custom_descriptors(draw: st.DrawFn):
     index = st.lists(st.text(min_size=1), min_size=2, max_size=10, unique=True)
     cols = columns(
         names_or_number=10,
-        elements=st.floats(allow_nan=False, allow_infinity=False),
+        elements=finite_floats(),
         unique=True,
         dtype=DTypeFloatNumpy,
     )
@@ -76,18 +76,16 @@ def custom_descriptors(draw: st.DrawFn):
 
 
 @st.composite
-def numerical_discrete_parameter(
+def numerical_discrete_parameters(
     draw: st.DrawFn,
-    min_value: Optional[float] = None,
-    max_value: Optional[float] = None,
+    min_value: float | None = None,
+    max_value: float | None = None,
 ):
     """Generate :class:`baybe.parameters.numerical.NumericalDiscreteParameter`."""
-    name = draw(parameter_name)
+    name = draw(parameter_names)
     values = draw(
         st.lists(
-            st.floats(
-                allow_infinity=False,
-                allow_nan=False,
+            finite_floats(
                 min_value=min_value,
                 max_value=max_value,
             ),
@@ -96,14 +94,13 @@ def numerical_discrete_parameter(
         )
     )
     max_tolerance = np.diff(np.sort(values)).min() / 2
-    if max_tolerance == 0.0:
+    if (max_tolerance == 0.0) or (max_tolerance != DTypeFloatNumpy(max_tolerance)):
         tolerance = 0.0
     else:
         tolerance = draw(
-            st.floats(
+            finite_floats(
                 min_value=0.0,
                 max_value=max_tolerance,
-                allow_nan=False,
                 exclude_max=True,
             )
         )
@@ -111,26 +108,26 @@ def numerical_discrete_parameter(
 
 
 @st.composite
-def numerical_continuous_parameter(draw: st.DrawFn):
+def numerical_continuous_parameters(draw: st.DrawFn):
     """Generate :class:`baybe.parameters.numerical.NumericalContinuousParameter`."""
-    name = draw(parameter_name)
-    bounds = draw(interval(exclude_half_bounded=True, exclude_fully_unbounded=True))
+    name = draw(parameter_names)
+    bounds = draw(intervals(exclude_half_bounded=True, exclude_fully_unbounded=True))
     return NumericalContinuousParameter(name=name, bounds=bounds)
 
 
 @st.composite
-def categorical_parameter(draw: st.DrawFn):
+def categorical_parameters(draw: st.DrawFn):
     """Generate :class:`baybe.parameters.categorical.CategoricalParameter`."""
-    name = draw(parameter_name)
+    name = draw(parameter_names)
     values = draw(categories)
     encoding = draw(st.sampled_from(CategoricalEncoding))
     return CategoricalParameter(name=name, values=values, encoding=encoding)
 
 
 @st.composite
-def task_parameter(draw: st.DrawFn):
+def task_parameters(draw: st.DrawFn):
     """Generate :class:`baybe.parameters.categorical.TaskParameter`."""
-    name = draw(parameter_name)
+    name = draw(parameter_names)
     values = draw(categories)
     active_values = draw(
         st.lists(st.sampled_from(values), min_size=1, max_size=len(values), unique=True)
@@ -139,11 +136,11 @@ def task_parameter(draw: st.DrawFn):
 
 
 @st.composite
-def substance_parameter(draw: st.DrawFn):
+def substance_parameters(draw: st.DrawFn):
     """Generate :class:`baybe.parameters.substance.SubstanceParameter`."""
-    name = draw(parameter_name)
+    name = draw(parameter_names)
     data = draw(substance_data())
-    decorrelate = draw(decorrelation)
+    decorrelate = draw(decorrelations)
     encoding = draw(st.sampled_from(SubstanceEncoding))
     return SubstanceParameter(
         name=name, data=data, decorrelate=decorrelate, encoding=encoding
@@ -151,22 +148,38 @@ def substance_parameter(draw: st.DrawFn):
 
 
 @st.composite
-def custom_parameter(draw: st.DrawFn):
+def custom_parameters(draw: st.DrawFn):
     """Generate :class:`baybe.parameters.custom.CustomDiscreteParameter`."""
-    name = draw(parameter_name)
+    name = draw(parameter_names)
     data = draw(custom_descriptors())
-    decorrelate = draw(decorrelation)
+    decorrelate = draw(decorrelations)
     return CustomDiscreteParameter(name=name, data=data, decorrelate=decorrelate)
 
 
-parameter = st.one_of(
+parameters = st.one_of(
     [
-        numerical_discrete_parameter(),
-        numerical_continuous_parameter(),
-        categorical_parameter(),
-        task_parameter(),
-        substance_parameter(),
-        custom_parameter(),
+        numerical_discrete_parameters(),
+        numerical_continuous_parameters(),
+        categorical_parameters(),
+        task_parameters(),
+        substance_parameters(),
+        custom_parameters(),
     ]
 )
 """A strategy that generates parameters."""
+
+
+discrete_parameters = st.one_of(
+    [
+        numerical_discrete_parameters(),
+        categorical_parameters(),
+        task_parameters(),
+        substance_parameters(),
+        custom_parameters(),
+    ]
+)
+"""A strategy that generates discrete parameters."""
+
+
+continuous_parameters = numerical_continuous_parameters
+"""A strategy that generates continuous parameters."""

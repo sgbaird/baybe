@@ -9,9 +9,12 @@ from random import randint
 from baybe.campaign import Campaign
 from baybe.objective import Objective
 from baybe.parameters import NumericalDiscreteParameter, SubstanceParameter
-from baybe.recommenders import RandomRecommender, SequentialGreedyRecommender
+from baybe.recommenders import (
+    BotorchRecommender,
+    RandomRecommender,
+    TwoPhaseMetaRecommender,
+)
 from baybe.searchspace import SearchSpace
-from baybe.strategies import TwoPhaseStrategy
 from baybe.targets import NumericalTarget
 from baybe.telemetry import (
     VARNAME_TELEMETRY_ENABLED,
@@ -68,14 +71,13 @@ config = {
     "objective": Objective(
         mode="SINGLE", targets=[NumericalTarget(name="Yield", mode="MAX")]
     ),
-    "strategy": TwoPhaseStrategy(
-        recommender=SequentialGreedyRecommender(
+    "recommender": TwoPhaseMetaRecommender(
+        recommender=BotorchRecommender(
             allow_repeated_recommendations=False,
             allow_recommending_already_measured=False,
         ),
         initial_recommender=RandomRecommender(),
     ),
-    "numerical_measurements_must_be_within_tolerance": True,
 }
 
 # Actual User

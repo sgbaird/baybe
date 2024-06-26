@@ -11,14 +11,17 @@
 import numpy as np
 
 from baybe import Campaign
-from baybe.objective import Objective
+from baybe.objectives import SingleTargetObjective
 from baybe.parameters import (
     CategoricalParameter,
     NumericalDiscreteParameter,
 )
-from baybe.recommenders import FPSRecommender, SequentialGreedyRecommender
+from baybe.recommenders import (
+    BotorchRecommender,
+    FPSRecommender,
+    TwoPhaseMetaRecommender,
+)
 from baybe.searchspace import SearchSpace
-from baybe.strategies import TwoPhaseStrategy
 from baybe.targets import NumericalTarget
 
 ### Experiment setup
@@ -44,11 +47,9 @@ parameters = [
 
 campaign = Campaign(
     searchspace=SearchSpace.from_product(parameters=parameters, constraints=None),
-    objective=Objective(
-        mode="SINGLE", targets=[NumericalTarget(name="Yield", mode="MAX")]
-    ),
-    strategy=TwoPhaseStrategy(
-        recommender=SequentialGreedyRecommender(),
+    objective=SingleTargetObjective(target=NumericalTarget(name="Yield", mode="MAX")),
+    recommender=TwoPhaseMetaRecommender(
+        recommender=BotorchRecommender(),
         initial_recommender=FPSRecommender(),
     ),
 )
@@ -63,7 +64,7 @@ print(campaign, end="\n" * 3)
 # We next serialize the campaign to JSON.
 # This yields a JSON representation in string format.
 # Since it is rather complex, we do not print this string here.
-# Note: Dataframes are encoded via binary parquet and are hence not human-readable.
+# Note: Dataframes are binary-encoded and are hence not human-readable.
 
 string = campaign.to_json()
 

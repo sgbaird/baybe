@@ -8,22 +8,24 @@
 
 ### Necessary imports
 
-from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
 from torch import Tensor, nn
 
 from baybe.campaign import Campaign
-from baybe.objective import Objective
+from baybe.objectives import SingleTargetObjective
 from baybe.parameters import (
     CategoricalParameter,
     NumericalDiscreteParameter,
     SubstanceParameter,
 )
-from baybe.recommenders import FPSRecommender, SequentialGreedyRecommender
+from baybe.recommenders import (
+    BotorchRecommender,
+    FPSRecommender,
+    TwoPhaseMetaRecommender,
+)
 from baybe.searchspace import SearchSpace
-from baybe.strategies import TwoPhaseStrategy
 from baybe.surrogates import register_custom_architecture
 from baybe.targets import NumericalTarget
 from baybe.utils.dataframe import add_fake_results
@@ -62,7 +64,7 @@ def _create_linear_block(in_features: int, out_features: int) -> list:
     return [nn.Linear(in_features, out_features), nn.Dropout(p=DROPOUT), nn.ReLU()]
 
 
-def _create_hidden_layers(num_neurons: List[int]) -> list:
+def _create_hidden_layers(num_neurons: list[int]) -> list:
     """Create all hidden layers comprised of linear blocks."""
     layers = []
     for in_features, out_features in zip(num_neurons, num_neurons[1:]):
@@ -111,9 +113,9 @@ class NeuralNetDropoutSurrogate:
     """Surrogate that extracts posterior using monte carlo dropout simulations."""
 
     def __init__(self):
-        self.model: Optional[nn.Module] = None
+        self.model: nn.Module | None = None
 
-    def _posterior(self, candidates: Tensor) -> Tuple[Tensor, Tensor]:
+    def _posterior(self, candidates: Tensor) -> tuple[Tensor, Tensor]:
         """See :class:`baybe.surrogates.Surrogate`."""
         self.model = self.model.train()  # keep dropout
         # Convert input from double to float
@@ -186,13 +188,9 @@ parameters = [
 
 campaign = Campaign(
     searchspace=SearchSpace.from_product(parameters=parameters, constraints=None),
-    objective=Objective(
-        mode="SINGLE", targets=[NumericalTarget(name="Yield", mode="MAX")]
-    ),
-    strategy=TwoPhaseStrategy(
-        recommender=SequentialGreedyRecommender(
-            surrogate_model=NeuralNetDropoutSurrogate()
-        ),
+    objective=SingleTargetObjective(target=NumericalTarget(name="Yield", mode="MAX")),
+    recommender=TwoPhaseMetaRecommender(
+        recommender=BotorchRecommender(surrogate_model=NeuralNetDropoutSurrogate()),
         initial_recommender=FPSRecommender(),
     ),
 )

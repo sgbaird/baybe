@@ -15,12 +15,13 @@ if TYPE_CHECKING:
 
 
 def structure_recommender_protocol(val: dict, _) -> RecommenderProtocol:
-    """A structure hook using ``TwoPhaseStrategy`` as fallback type."""  # noqa: D401 (imperative mood)
+    """A structure hook using ``TwoPhaseMetaRecommender`` as fallback type."""  # noqa: D401 (imperative mood)
     from baybe.recommenders.base import RecommenderProtocol
-    from baybe.strategies.composite import TwoPhaseStrategy
+    from baybe.recommenders.meta.sequential import TwoPhaseMetaRecommender
 
     try:
-        _type = val["type"]
+        val = val.copy()
+        _type = val.pop("type")
         cls = next(
             (cl for cl in get_subclasses(RecommenderProtocol) if cl.__name__ == _type),
             None,
@@ -28,14 +29,14 @@ def structure_recommender_protocol(val: dict, _) -> RecommenderProtocol:
         if cls is None:
             raise ValueError(f"Unknown subclass '{_type}'.")
     except KeyError:
-        cls = TwoPhaseStrategy
+        cls = TwoPhaseMetaRecommender
         warnings.warn(
             f"A recommender has been specified without a corresponding type. "
-            f"As a fallback, '{TwoPhaseStrategy.__name__}' is used. "
+            f"As a fallback, '{TwoPhaseMetaRecommender.__name__}' is used. "
             f"However, this behavior is deprecated and will be disabled in "
             f"a future version.",
             DeprecationWarning,
         )
-    fun = make_dict_structure_fn(cls, converter)
+    fun = make_dict_structure_fn(cls, converter, _cattrs_forbid_extra_keys=True)  # type: ignore
 
     return fun(val, cls)

@@ -6,11 +6,6 @@ from __future__ import annotations
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 import os
 import shutil
-import sys
-
-# We need to "trick" sphinx due to it thinking that decorated classes are just aliases
-# We thus need to import and later define some specific names
-from baybe.surrogates import get_available_surrogates
 
 # -- Path setup --------------------------------------------------------------
 
@@ -111,7 +106,6 @@ nitpick_ignore_regex = [
     # Ignore errors that are from inherited classes we cannot control
     (r"py:.*", r".*DTypeFloatNumpy.*"),
     (r"py:.*", r".*DTypeFloatONNX.*"),
-    (r"py:.*", r".*AdapterModel.*"),
     # Ignore the functions that we manually delete from in child classes
     (r"py:.*", r".*from_dict.*"),
     (r"py:.*", r".*from_json.*"),
@@ -128,6 +122,8 @@ nitpick_ignore_regex = [
     (r"py:class", "baybe.utils.basic._C"),
     (r"py:class", "baybe.utils.basic._T"),
     (r"py:class", "baybe.utils.basic._U"),
+    # Ignore custom class properties
+    (r"py:obj", "baybe.acquisition.acqfs.*.is_mc"),
 ]
 
 
@@ -230,10 +226,6 @@ html_theme_options = {
     "source_directory": "docs/",
 }
 
-# Ignored links for linkcheck
-if "BAYBE_DOCS_LINKCHECK_IGNORE" in os.environ:
-    linkcheck_ignore = ["https://emdgroup.github.io/baybe/"]
-
 autodoc_type_aliases = {"Smiles": "Smiles"}
 
 # Everything in the module has the prefix baybe
@@ -256,11 +248,6 @@ intersphinx_mapping = {
 # --- Options for autodoc typehints and autodoc -------------------------------
 # https://pypi.org/project/sphinx-autodoc-typehints/
 
-# For some reason, sphinx does not like it if we use the -D option to just tell it
-# that we want to include private members. We thus manually verify whether the option
-# was set.
-private_members = "True" in sys.argv[sys.argv.index("-D") + 1]
-
 # Represent typehints whenever possible.
 autodoc_typehints = "both"
 # Separate class names and init functions.
@@ -273,8 +260,6 @@ autodoc_preserve_defaults = False
 autodoc_default_options = {
     # Order by type (function, attribute...), required for proper inheritance
     "member-order": "groupwise",
-    # Include private members if this was requested
-    "private-members": private_members,
 }
 # Only show parameters that are documented.
 autodoc_typehints_description_target = "documented_params"
@@ -286,10 +271,8 @@ typehints_use_signature = True
 
 
 # This function enables us to hook into the internal sphinx processes
-# These allow us to change docstrings (resp. how they are processed) which is currently
-# necessary for properly rendering the surrogates
+# These allow us to change docstrings (resp. how they are processed)
 def setup(app):  # noqa: D103
-    get_available_surrogates()
     app.connect("autodoc-process-docstring", autodoc_process_docstring)
 
 

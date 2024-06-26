@@ -1,94 +1,21 @@
 """Telemetry functionality for BayBE.
 
-Important:
-    BayBE collects anonymous usage statistics **only** for employees of Merck KGaA,
-    Darmstadt, Germany and/or its affiliates. The recording of metrics is turned off
-    for all other users and impossible due to a VPN block. In any case, the usage
-    statistics do **not** involve logging of recorded measurements, targets or any
-    project information that would allow for reconstruction of details. The user and
-    host machine names are irreversibly anonymized.
-
-**Monitored quantities are:**
-    * ``batch_size`` used when querying recommendations
-    * Number of parameters in the search space
-    * Number of constraints in the search space
-    * How often ``recommend`` was called
-    * How often ``add_measurements`` was called
-    * How often a search space is newly created
-    * How often initial measurements are added before recommendations were calculated
-      ("naked initial measurements")
-    * The fraction of measurements added that correspond to previous recommendations
-    * Each measurement is associated with an irreversible hash of the user- and hostname
-
-**The following environment variables control the behavior of BayBE telemetry:**
-
-``BAYBE_TELEMETRY_ENABLED``
-    Flag that can turn off telemetry entirely (default is `true`). To turn it off set it
-    to `false`.
-
-``BAYBE_TELEMETRY_ENDPOINT``
-    The receiving endpoint URL for telemetry data.
-
-``BAYBE_TELEMETRY_VPN_CHECK``
-    Flag turning an initial telemetry connectivity check on/off (default is `true`).
-
-``BAYBE_TELEMETRY_VPN_CHECK_TIMEOUT``
-    The timeout in seconds for the check whether the endpoint URL is reachable.
-
-``BAYBE_TELEMETRY_USERNAME``
-    The name of the user executing BayBE code. Defaults to an irreversible hash of
-    the username according to the OS.
-
-``BAYBE_TELEMETRY_HOSTNAME``
-    The name of the machine executing BayBE code. Defaults to an irreversible hash of
-    the machine name.
-
-If you wish to disable logging, you can set the following environment variable:
-
-.. code-block:: console
-
-    export BAYBE_TELEMETRY_ENABLED=false
-
-or in Python:
-
-.. code-block:: python
-
-    import os
-    os.environ["BAYBE_TELEMETRY_ENABLED"] = "false"
-
-before calling any BayBE functionality.
-
-Telemetry can be re-enabled by simply removing the variable:
-
-.. code-block:: console
-
-    unset BAYBE_TELEMETRY_ENABLED
-
-or in Python:
-
-.. code-block:: python
-
-    os.environ.pop["BAYBE_TELEMETRY_ENABLED"]
-
-Note, however, that (un-)setting the variable in the shell will not affect the running
-Python session.
+For more details, see https://emdgroup.github.io/baybe/userguide/envvars.html#telemetry
 """
+
 import getpass
 import hashlib
-import logging
 import os
 import socket
-from typing import TYPE_CHECKING, Dict, List, Union
+import warnings
+from collections.abc import Sequence
 from urllib.parse import urlparse
 
 import pandas as pd
-import requests
 
 from baybe.parameters.base import Parameter
 from baybe.utils.boolean import strtobool
 from baybe.utils.dataframe import fuzzy_row_match
-
-_logger = logging.getLogger(__name__)
 
 # Telemetry environment variable names
 VARNAME_TELEMETRY_ENABLED = "BAYBE_TELEMETRY_ENABLED"
@@ -105,12 +32,7 @@ DEFAULT_TELEMETRY_ENDPOINT = (
 )
 DEFAULT_TELEMETRY_VPN_CHECK = "true"
 DEFAULT_TELEMETRY_VPN_CHECK_TIMEOUT = "0.5"
-DEFAULT_TELEMETRY_USERNAME = (
-    hashlib.sha256(getpass.getuser().upper().encode()).hexdigest().upper()[:10]
-)  # this hash is irreversible and cannot identify the user or their machine
-DEFAULT_TELEMETRY_HOSTNAME = (
-    hashlib.sha256(socket.gethostname().encode()).hexdigest().upper()[:10]
-)  # this hash is irreversible and cannot identify the user or their machine
+
 
 # Telemetry labels for metrics
 TELEM_LABELS = {
@@ -129,20 +51,18 @@ try:
     from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
         OTLPMetricExporter,
     )
-    from opentelemetry.metrics import get_meter, set_meter_provider
+    from opentelemetry.metrics import Histogram, get_meter, set_meter_provider
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.sdk.resources import Resource
-
-    if TYPE_CHECKING:
-        from opentelemetry.metrics import Histogram
 except ImportError:
     # Failed telemetry install/import should not fail baybe, so telemetry is being
     # disabled in that case
     if strtobool(os.environ.get(VARNAME_TELEMETRY_ENABLED, DEFAULT_TELEMETRY_ENABLED)):
-        _logger.warning(
-            "Opentelemetry could not be imported, potentially it is not "
-            "installed. Disabling baybe telemetry."
+        warnings.warn(
+            "Opentelemetry could not be imported, potentially it is not installed. "
+            "Disabling baybe telemetry.",
+            UserWarning,
         )
     os.environ[VARNAME_TELEMETRY_ENABLED] = "false"
 
@@ -159,6 +79,21 @@ def is_enabled() -> bool:
 
 # Attempt telemetry initialization
 if is_enabled():
+    # Assign default user and machine name
+    try:
+        DEFAULT_TELEMETRY_USERNAME = (
+            hashlib.sha256(getpass.getuser().upper().encode()).hexdigest().upper()[:10]
+        )
+    except ModuleNotFoundError:
+        # getpass.getuser() does not work on Windows if all the environment variables
+        # it checks are empty. Since then there is no way of inferring the username, we
+        # use UNKNOWN as fallback.
+        DEFAULT_TELEMETRY_USERNAME = "UNKNOWN"
+
+    DEFAULT_TELEMETRY_HOSTNAME = (
+        hashlib.sha256(socket.gethostname().encode()).hexdigest().upper()[:10]
+    )
+
     _endpoint_url = os.environ.get(
         VARNAME_TELEMETRY_ENDPOINT, DEFAULT_TELEMETRY_ENDPOINT
     )
@@ -177,11 +112,11 @@ if is_enabled():
                 )
             )
         except (ValueError, TypeError):
-            _logger.warning(
-                "WARNING: Value passed for environment variable %s"
-                " is not a valid floating point number. Using default of %s.",
-                VARNAME_TELEMETRY_VPN_CHECK_TIMEOUT,
-                DEFAULT_TELEMETRY_VPN_CHECK_TIMEOUT,
+            warnings.warn(
+                f"WARNING: Value passed for environment variable "
+                f"{VARNAME_TELEMETRY_VPN_CHECK_TIMEOUT} is not a valid floating point "
+                f"number. Using default of {DEFAULT_TELEMETRY_VPN_CHECK_TIMEOUT}.",
+                UserWarning,
             )
             _TIMEOUT_S = float(DEFAULT_TELEMETRY_VPN_CHECK_TIMEOUT)
 
@@ -190,14 +125,10 @@ if is_enabled():
         if strtobool(
             os.environ.get(VARNAME_TELEMETRY_VPN_CHECK, DEFAULT_TELEMETRY_VPN_CHECK)
         ):
-            response = requests.get(
-                "http://verkehrsnachrichten.merck.de/", timeout=_TIMEOUT_S
-            )
-            if response.status_code != 200:
-                raise requests.RequestException("Cannot reach telemetry network.")
+            socket.gethostbyname("verkehrsnachrichten.merck.de")
 
         # User has connectivity to the telemetry endpoint, so we initialize
-        _instruments: Dict[str, Histogram] = {}
+        _instruments: dict[str, Histogram] = {}
         _resource = Resource.create(
             {"service.namespace": "BayBE", "service.name": "SDK"}
         )
@@ -210,20 +141,27 @@ if is_enabled():
         _provider = MeterProvider(resource=_resource, metric_readers=[_reader])
         set_meter_provider(_provider)
         _meter = get_meter("aws-otel", "1.0")
-    except Exception:
+    except Exception as ex:
         # Catching broad exception here and disabling telemetry in that case to avoid
         # any telemetry timeouts or interference for the user in case of unexpected
         # errors. Possible ones are for instance ``socket.gaierror`` in case the user
         # has no internet connection.
-        _logger.info(
-            "WARNING: BayBE Telemetry endpoint %s cannot be reached. "
-            "Disabling telemetry.",
-            _endpoint_url,
-        )
+        if os.environ.get(VARNAME_TELEMETRY_USERNAME, "").startswith("DEV_"):
+            # This warning is only printed for developers to make them aware of
+            # potential issues
+            warnings.warn(
+                f"WARNING: BayBE Telemetry endpoint {_endpoint_url} cannot be reached. "
+                "Disabling telemetry. The exception encountered was: "
+                f"{type(ex).__name__}, {ex}",
+                UserWarning,
+            )
         os.environ[VARNAME_TELEMETRY_ENABLED] = "false"
+else:
+    DEFAULT_TELEMETRY_USERNAME = "UNKNOWN"
+    DEFAULT_TELEMETRY_HOSTNAME = "UNKNOWN"
 
 
-def get_user_details() -> Dict[str, str]:
+def get_user_details() -> dict[str, str]:
     """Generate user details.
 
     These are submitted as metadata with requested telemetry stats.
@@ -243,7 +181,7 @@ def get_user_details() -> Dict[str, str]:
     return {"host": hostname_hash, "user": username_hash, "version": __version__}
 
 
-def telemetry_record_value(instrument_name: str, value: Union[int, float]) -> None:
+def telemetry_record_value(instrument_name: str, value: int | float) -> None:
     """Transmit a given value under a given label to the telemetry backend.
 
     The values are recorded as histograms, i.e. the info about record time and sample
@@ -259,7 +197,7 @@ def telemetry_record_value(instrument_name: str, value: Union[int, float]) -> No
         _submit_scalar_value(instrument_name, value)
 
 
-def _submit_scalar_value(instrument_name: str, value: Union[int, float]) -> None:
+def _submit_scalar_value(instrument_name: str, value: int | float) -> None:
     """See :func:`baybe.telemetry.telemetry_record_value`."""
     if instrument_name in _instruments:
         histogram = _instruments[instrument_name]
@@ -275,7 +213,7 @@ def _submit_scalar_value(instrument_name: str, value: Union[int, float]) -> None
 def telemetry_record_recommended_measurement_percentage(
     cached_recommendation: pd.DataFrame,
     measurements: pd.DataFrame,
-    parameters: List[Parameter],
+    parameters: Sequence[Parameter],
     numerical_measurements_must_be_within_tolerance: bool,
 ) -> None:
     """Submit the percentage of added measurements.

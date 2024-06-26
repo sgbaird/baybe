@@ -8,12 +8,14 @@
 
 ### Necessary imports for this example
 
+import os
+
 import numpy as np
 import pandas as pd
 
 from baybe import Campaign
 from baybe.constraints import DiscreteCustomConstraint
-from baybe.objective import Objective
+from baybe.objectives import SingleTargetObjective
 from baybe.parameters import (
     CategoricalParameter,
     NumericalDiscreteParameter,
@@ -26,6 +28,11 @@ from baybe.utils.dataframe import add_fake_results
 ### Experiment setup
 
 # We begin by setting up some parameters for our experiments.
+# `TEMPERATURE_RESOLUTION` describes the number of different temperatures used.
+
+SMOKE_TEST = "SMOKE_TEST" in os.environ
+TEMPERATURE_RESOLUTION = 3 if SMOKE_TEST else 10
+
 dict_solvent = {
     "water": "O",
     "C1": "C",
@@ -41,7 +48,9 @@ speed = CategoricalParameter(
     "Speed", values=["very slow", "slow", "normal", "fast", "very fast"], encoding="INT"
 )
 temperature = NumericalDiscreteParameter(
-    "Temperature", values=list(np.linspace(100, 200, 10)), tolerance=0.5
+    "Temperature",
+    values=list(np.linspace(100, 200, TEMPERATURE_RESOLUTION)),
+    tolerance=0.5,
 )
 concentration = NumericalDiscreteParameter(
     "Concentration", values=[1, 2, 5, 10], tolerance=0.4
@@ -93,9 +102,7 @@ constraint = DiscreteCustomConstraint(
 
 searchspace = SearchSpace.from_product(parameters=parameters, constraints=[constraint])
 
-objective = Objective(
-    mode="SINGLE", targets=[NumericalTarget(name="yield", mode="MAX")]
-)
+objective = SingleTargetObjective(target=NumericalTarget(name="yield", mode="MAX"))
 
 ### Creating and printing the campaign
 

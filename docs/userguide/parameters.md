@@ -128,7 +128,8 @@ SubstanceParameter(
 ```
 
 The ``encoding`` option defines what kind of descriptors are calculated:
-* ``MORDRED``: 2D descriptors from the [Mordred package](https://mordred-descriptor.github.io/documentation/master/)
+* ``MORDRED``: 2D descriptors from the [Mordred package](https://mordred-descriptor.github.io/documentation/master/).
+  Since the original package is now unmaintained, baybe requires the community replacement [mordredcommunity](https://github.com/JacksonBurns/mordred-community)
 * ``RDKIT``: 2D descriptors from the [RDKit package](https://www.rdkit.org/)
 * ``MORGAN_FP``: Morgan fingerprints calculated with RDKit (1024 bits, radius 4)
 
@@ -145,6 +146,21 @@ The descriptors calculated for a ``SubstanceParameter`` were developed to descri
 small molecules and are not suitable for other substances. If you deal with large 
 molecules like polymers or arbitrary substance mixtures, we recommend to provide your 
 own descriptors via the ``CustomParameter``.
+```
+
+In the following example from an application you can see
+the outcome for treating the solvent, base and ligand in a direct arylation reaction
+optimization (from [Shields, B.J. et al.](https://doi.org/10.1038/s41586-021-03213-y)) with
+different chemical encodings compared to one-hot and a random baseline:
+
+```{image} ../../examples/Backtesting/full_lookup_light.svg
+:align: center
+:class: only-light
+```
+
+```{image} ../../examples/Backtesting/full_lookup_dark.svg
+:align: center
+:class: only-dark
 ```
 
 ```{admonition} Optional dependency

@@ -11,6 +11,7 @@
 ### Necessary imports for this example
 
 import math
+import os
 
 import numpy as np
 
@@ -22,7 +23,7 @@ from baybe.constraints import (
     DiscreteSumConstraint,
     ThresholdCondition,
 )
-from baybe.objective import Objective
+from baybe.objectives import SingleTargetObjective
 from baybe.parameters import NumericalDiscreteParameter, SubstanceParameter
 from baybe.searchspace import SearchSpace
 from baybe.targets import NumericalTarget
@@ -33,6 +34,11 @@ from baybe.utils.dataframe import add_fake_results
 # This parameter denotes the tolerance with regard to the calculation of the sum.
 
 SUM_TOLERANCE = 1.0
+
+SMOKE_TEST = "SMOKE_TEST" in os.environ
+
+# This parameter denotes the resolution of the discretization of the parameters
+RESOLUTION = 5 if SMOKE_TEST else 12
 
 dict_solvents = {
     "water": "O",
@@ -47,13 +53,13 @@ solvent3 = SubstanceParameter(name="Solv3", data=dict_solvents, encoding="MORDRE
 # Parameters for representing the fraction.
 
 fraction1 = NumericalDiscreteParameter(
-    name="Frac1", values=list(np.linspace(0, 100, 12)), tolerance=0.2
+    name="Frac1", values=list(np.linspace(0, 100, RESOLUTION)), tolerance=0.2
 )
 fraction2 = NumericalDiscreteParameter(
-    name="Frac2", values=list(np.linspace(0, 100, 12)), tolerance=0.2
+    name="Frac2", values=list(np.linspace(0, 100, RESOLUTION)), tolerance=0.2
 )
 fraction3 = NumericalDiscreteParameter(
-    name="Frac3", values=list(np.linspace(0, 100, 12)), tolerance=0.2
+    name="Frac3", values=list(np.linspace(0, 100, RESOLUTION)), tolerance=0.2
 )
 
 parameters = [solvent1, solvent2, solvent3, fraction1, fraction2, fraction3]
@@ -100,9 +106,7 @@ constraints = [perm_inv_constraint, sum_constraint, no_duplicates_constraint]
 
 searchspace = SearchSpace.from_product(parameters=parameters, constraints=constraints)
 
-objective = Objective(
-    mode="SINGLE", targets=[NumericalTarget(name="Target_1", mode="MAX")]
-)
+objective = SingleTargetObjective(target=NumericalTarget(name="Target_1", mode="MAX"))
 
 ### Creating and printing the campaign
 
@@ -113,7 +117,7 @@ print(campaign)
 
 # The following loop performs some recommendations and manually verifies the given constraints.
 
-N_ITERATIONS = 3
+N_ITERATIONS = 2 if SMOKE_TEST else 3
 for kIter in range(N_ITERATIONS):
     print(f"\n#### ITERATION {kIter+1} ####")
 
@@ -155,7 +159,7 @@ for kIter in range(N_ITERATIONS):
     )
     print(
         f"No. of unique 2-solvent entries (exp."
-        f" {math.comb(len(dict_solvents), 2)*(12-2)})",
+        f" {math.comb(len(dict_solvents), 2)*(RESOLUTION-2)})",
         (campaign.searchspace.discrete.exp_rep[["Frac1", "Frac2", "Frac3"]] == 0.0)
         .sum(axis=1)
         .eq(1)
@@ -163,7 +167,7 @@ for kIter in range(N_ITERATIONS):
     )
     print(
         f"No. of unique 3-solvent entries (exp."
-        f" {math.comb(len(dict_solvents), 3)*((12-3)*(12-2))//2})",
+        f" {math.comb(len(dict_solvents), 3)*((RESOLUTION-3)*(RESOLUTION-2))//2})",
         (campaign.searchspace.discrete.exp_rep[["Frac1", "Frac2", "Frac3"]] == 0.0)
         .sum(axis=1)
         .eq(0)

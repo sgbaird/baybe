@@ -1,33 +1,39 @@
 """Chemistry tools."""
 
+import os
 import ssl
+import tempfile
 import urllib.request
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Type, Union
 
 import numpy as np
 import pandas as pd
 from joblib import Memory
 
-from baybe.exceptions import OptionalImportError
-
-try:
-    from mordred import Calculator, descriptors
-    from rdkit import Chem, RDLogger
-    from rdkit.Chem.rdMolDescriptors import GetMorganFingerprintAsBitVect
-except ImportError:
-    raise OptionalImportError(
-        """The requested functionality requires the installation of optional """
-        """chemistry dependencies. Please run "pip install 'baybe[chem]'"."""
-    )
+from baybe._optional.chem import (
+    Calculator,
+    Chem,
+    GetMorganFingerprintAsBitVect,
+    RDLogger,
+    descriptors,
+)
+from baybe.utils.numerical import DTypeFloatNumpy
 
 _mordred_calculator = Calculator(descriptors)
 
 
 # Caching
-_cachedir = Path.home() / ".baybe_cache"
-_memory_utils = Memory(_cachedir / "utils")
+_cachedir = os.environ.get(
+    "BAYBE_CACHE_DIR", str(Path(tempfile.gettempdir()) / ".baybe_cache")
+)
+
+
+def _dummy_wrapper(func):
+    return func
+
+
+_disk_cache = _dummy_wrapper if _cachedir == "" else Memory(Path(_cachedir)).cache
 
 
 def name_to_smiles(name: str) -> str:
@@ -35,7 +41,7 @@ def name_to_smiles(name: str) -> str:
 
     This script is useful to combine with ``df.apply`` from pandas, hence it does not
     throw exceptions for invalid molecules but instead returns an empty string for
-    easy subsequent postprocessing of the data frame.
+    easy subsequent postprocessing of the dataframe.
 
     Args:
         name: Name or nickname of compound.
@@ -65,7 +71,7 @@ def name_to_smiles(name: str) -> str:
 
 
 @lru_cache(maxsize=None)
-@_memory_utils.cache
+@_disk_cache
 def _smiles_to_mordred_features(smiles: str) -> np.ndarray:
     """Memory- and disk-cached computation of Mordred descriptors.
 
@@ -80,11 +86,11 @@ def _smiles_to_mordred_features(smiles: str) -> np.ndarray:
             _mordred_calculator(Chem.MolFromSmiles(smiles)).fill_missing()
         )
     except Exception:
-        return np.full(len(_mordred_calculator.descriptors), np.NaN)
+        return np.full(len(_mordred_calculator.descriptors), np.nan)
 
 
 def smiles_to_mordred_features(
-    smiles_list: List[str],
+    smiles_list: list[str],
     prefix: str = "",
     dropna: bool = True,
 ) -> pd.DataFrame:
@@ -103,7 +109,7 @@ def smiles_to_mordred_features(
     features = [_smiles_to_mordred_features(smiles) for smiles in smiles_list]
     descriptor_names = list(_mordred_calculator.descriptors)
     columns = [prefix + "MORDRED_" + str(name) for name in descriptor_names]
-    dataframe = pd.DataFrame(data=features, columns=columns)
+    dataframe = pd.DataFrame(data=features, columns=columns, dtype=DTypeFloatNumpy)
 
     if dropna:
         dataframe = dataframe.dropna(axis=1)
@@ -111,7 +117,7 @@ def smiles_to_mordred_features(
     return dataframe
 
 
-def smiles_to_molecules(smiles_list: List[str]) -> List[Chem.Mol]:
+def smiles_to_molecules(smiles_list: list[str]) -> list[Chem.Mol]:
     """Convert a given list of SMILES strings into corresponding Molecule objects.
 
     Args:
@@ -138,7 +144,7 @@ def smiles_to_molecules(smiles_list: List[str]) -> List[Chem.Mol]:
 
 
 def smiles_to_rdkit_features(
-    smiles_list: List[str], prefix: str = "", dropna: bool = True
+    smiles_list: list[str], prefix: str = "", dropna: bool = True
 ) -> pd.DataFrame:
     """Compute RDKit chemical descriptors for a list of SMILES strings.
 
@@ -155,7 +161,7 @@ def smiles_to_rdkit_features(
     res = []
     for mol in mols:
         desc = {
-            prefix + "RDKIT_" + dname: func(mol)
+            prefix + "RDKIT_" + dname: DTypeFloatNumpy(func(mol))
             for dname, func in Chem.Descriptors.descList
         }
         res.append(desc)
@@ -168,9 +174,9 @@ def smiles_to_rdkit_features(
 
 
 def smiles_to_fp_features(
-    smiles_list: List[str],
+    smiles_list: list[str],
     prefix: str = "",
-    dtype: Union[Type[int], Type[float]] = int,
+    dtype: type[int] | type[float] = int,
     radius: int = 4,
     n_bits: int = 1024,
 ) -> pd.DataFrame:

@@ -12,17 +12,22 @@
 
 ### Necessary imports for this example
 
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
 from baybe import Campaign
-from baybe.objective import Objective
+from baybe.objectives import SingleTargetObjective
 from baybe.parameters import NumericalDiscreteParameter
-from baybe.recommenders import RandomRecommender, SequentialGreedyRecommender
+from baybe.recommenders import (
+    BotorchRecommender,
+    RandomRecommender,
+    TwoPhaseMetaRecommender,
+)
 from baybe.searchspace import SearchSpace
 from baybe.simulation import simulate_scenarios
-from baybe.strategies import TwoPhaseStrategy
 from baybe.targets import NumericalTarget
 
 ### Parameters for a full simulation loop
@@ -30,8 +35,16 @@ from baybe.targets import NumericalTarget
 # For the full simulation, we need to define some additional parameters.
 # These are the number of Monte Carlo runs and the number of experiments to be conducted per run.
 
-N_MC_ITERATIONS = 2
-N_DOE_ITERATIONS = 2
+# The parameter `POINTS_PER_DIM` controls the number of points per dimension.
+# Note that the searchspace will have `POINTS_PER_DIM**DIMENSION` many points.
+
+SMOKE_TEST = "SMOKE_TEST" in os.environ
+
+N_MC_ITERATIONS = 2 if SMOKE_TEST else 5
+N_DOE_ITERATIONS = 2 if SMOKE_TEST else 5
+DIMENSION = 4
+BOUNDS = [(-2, 2), (-2, 2), (-2, 2), (-2, 2)]
+POINTS_PER_DIM = 3 if SMOKE_TEST else 10
 
 ### Defining the test function
 
@@ -46,52 +59,43 @@ def sum_of_squares(*x: float) -> float:
     return res
 
 
-DIMENSION = 4
-BOUNDS = [(-2, 2), (-2, 2), (-2, 2), (-2, 2)]
-
 ### Creating the searchspace and the objective
 
 # As we expect it to be the most common use case, we construct a purely discrete space here.
 # Details on how to adjust this for other spaces can be found in the searchspace examples.
 
-# The parameter `POINTS_PER_DIM` controls the number of points per dimension.
-# Note that the searchspace will have `POINTS_PER_DIM**DIMENSION` many points.
-
-POINTS_PER_DIM = 10
 parameters = [
     NumericalDiscreteParameter(
         name=f"x_{k+1}",
-        values=list(np.linspace(*BOUNDS[k], 15)),
+        values=list(np.linspace(*BOUNDS[k], POINTS_PER_DIM)),
         tolerance=0.01,
     )
     for k in range(DIMENSION)
 ]
 
 searchspace = SearchSpace.from_product(parameters=parameters)
-objective = Objective(
-    mode="SINGLE", targets=[NumericalTarget(name="Target", mode="MIN")]
-)
+objective = SingleTargetObjective(target=NumericalTarget(name="Target", mode="MIN"))
 
 ### Constructing campaigns for the simulation loop
 
-# To simplify adjusting the example for other strategies, we construct some strategy objects.
-# For details on strategy objects, we refer to [`strategies`](./../Basics/strategies.md).
+# To simplify adjusting the example for other recommenders, we construct some recommender objects.
+# For details on recommender objects, we refer to [`recommenders`](./../Basics/recommenders.md).
 
-seq_greedy_EI_strategy = TwoPhaseStrategy(
-    recommender=SequentialGreedyRecommender(acquisition_function_cls="qEI"),
+seq_greedy_EI_recommender = TwoPhaseMetaRecommender(
+    recommender=BotorchRecommender(acquisition_function="qEI"),
 )
-random_strategy = TwoPhaseStrategy(recommender=RandomRecommender())
+random_recommender = TwoPhaseMetaRecommender(recommender=RandomRecommender())
 
-# We now create one campaign per strategy.
+# We now create one campaign per recommender.
 
 seq_greedy_EI_campaign = Campaign(
     searchspace=searchspace,
-    strategy=seq_greedy_EI_strategy,
+    recommender=seq_greedy_EI_recommender,
     objective=objective,
 )
 random_campaign = Campaign(
     searchspace=searchspace,
-    strategy=random_strategy,
+    recommender=random_recommender,
     objective=objective,
 )
 

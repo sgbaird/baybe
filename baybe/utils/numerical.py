@@ -1,14 +1,22 @@
 """Utilities for numeric operations."""
-from typing import List
+
+import os
+from collections.abc import Sequence
 
 import numpy as np
-import torch
+import numpy.typing as npt
 
-DTypeFloatNumpy = np.float64
+from baybe.utils.boolean import strtobool
+
+VARNAME_NUMPY_USE_SINGLE_PRECISION = "BAYBE_NUMPY_USE_SINGLE_PRECISION"
+"""Environment variable name for enforcing single precision in numpy."""
+
+DTypeFloatNumpy = (
+    np.float32
+    if strtobool(os.environ.get(VARNAME_NUMPY_USE_SINGLE_PRECISION, "False"))
+    else np.float64
+)
 """Floating point data type used for numpy arrays."""
-
-DTypeFloatTorch = torch.float64
-"""Floating point data type used for torch tensors."""
 
 DTypeFloatONNX = np.float32
 """Floating point data type used for ONNX models.
@@ -21,7 +29,7 @@ There is no clear documentation but some references can be found here (version 1
 """  # noqa: E501
 
 
-def geom_mean(arr: np.ndarray, weights: List[float]) -> np.ndarray:
+def geom_mean(arr: np.ndarray, weights: Sequence[float]) -> np.ndarray:
     """Calculate the (weighted) geometric mean along the second axis of a 2-D array.
 
     Alternative to ``gmean`` from scipy that avoids logarithms and division errors.
@@ -36,16 +44,19 @@ def geom_mean(arr: np.ndarray, weights: List[float]) -> np.ndarray:
     return np.prod(np.power(arr, np.atleast_2d(weights) / np.sum(weights)), axis=1)
 
 
-def closest_element(array: np.ndarray, target: float) -> float:
+def closest_element(array: npt.ArrayLike, target: float) -> float:
     """Find the element of an array that is closest to a target value.
 
     Args:
-        array: The array in which the closest value should be found.
+        array: The array in which the closest value is to be found.
         target: The target value.
 
     Returns:
-        The closes element.
+        The closest element.
     """
+    if np.ndim(array) == 0:
+        return np.asarray(array).item()
+    array = np.ravel(array)
     return array[np.abs(array - target).argmin()]
 
 

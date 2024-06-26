@@ -3,23 +3,24 @@
 from __future__ import annotations
 
 import json
-from typing import List
 
 import cattrs
 import numpy as np
 import pandas as pd
 from attrs import define, field
+from attrs.converters import optional
+from attrs.validators import instance_of
 
 from baybe.exceptions import DeprecationError
-from baybe.objective import Objective
+from baybe.objectives.base import Objective, to_objective
 from baybe.parameters.base import Parameter
 from baybe.recommenders.base import RecommenderProtocol
+from baybe.recommenders.meta.sequential import TwoPhaseMetaRecommender
 from baybe.searchspace.core import (
     SearchSpace,
     validate_searchspace_from_config,
 )
 from baybe.serialization import SerialMixin, converter
-from baybe.strategies import TwoPhaseStrategy
 from baybe.targets.base import Target
 from baybe.telemetry import (
     TELEM_LABELS,
@@ -27,12 +28,6 @@ from baybe.telemetry import (
     telemetry_record_value,
 )
 from baybe.utils.boolean import eq_dataframe
-
-# Converter for config validation
-_validation_converter = converter.copy()
-_validation_converter.register_structure_hook(
-    SearchSpace, validate_searchspace_from_config
-)
 
 
 @define
@@ -45,20 +40,25 @@ class Campaign(SerialMixin):
     In particular, a campaign:
         * Defines the objective of an experimentation process.
         * Defines the search space over which the experimental parameter may vary.
-        * Defines a strategy for traversing the search space.
+        * Defines a recommender for exploring the search space.
         * Records the measurement data collected during the process.
         * Records metadata about the progress of the experimentation process.
     """
 
     # DOE specifications
-    searchspace: SearchSpace = field()
+    searchspace: SearchSpace = field(validator=instance_of(SearchSpace))
     """The search space in which the experiments are conducted."""
 
-    objective: Objective = field()
-    """The optimization objective."""
+    objective: Objective | None = field(default=None, converter=optional(to_objective))
+    """The optimization objective.
+    When passing a single :class:`baybe.targets.base.Target`, it gets automatically
+    wrapped into a :class:`baybe.objectives.single.SingleTargetObjective`."""
 
-    strategy: RecommenderProtocol = field(factory=TwoPhaseStrategy)
-    """The employed strategy"""
+    recommender: RecommenderProtocol = field(
+        factory=TwoPhaseMetaRecommender,
+        validator=instance_of(RecommenderProtocol),  # type: ignore[type-abstract]
+    )
+    """The employed recommender"""
 
     # Metadata
     n_batches_done: int = field(default=0, init=False)
@@ -82,6 +82,24 @@ class Campaign(SerialMixin):
     numerical_measurements_must_be_within_tolerance: bool = field(default=None)
     """Deprecated! Raises an error when used."""
 
+    def __str__(self) -> str:
+        start_bold = "\033[1m"
+        end_bold = "\033[0m"
+
+        # Get str representation of campaign fields
+        fields_to_print = [self.searchspace, self.objective, self.recommender]
+        fields_str = "\n\n".join(str(x) for x in fields_to_print)
+
+        # Put all relevant attributes of the campaign in one string
+        campaign_str = f"""{start_bold}Campaign{end_bold}
+        \n{start_bold}Meta Data{end_bold}\nBatches Done: {self.n_batches_done}
+        \rFits Done: {self.n_fits_done}\n\n{fields_str}\n"""
+
+        return campaign_str.replace("\n", "\n ").replace("\r", "\r ")
+
+    strategy: RecommenderProtocol = field(default=None)
+    """Deprecated! Raises an error when used."""
+
     @numerical_measurements_must_be_within_tolerance.validator
     def _validate_tolerance_flag(self, _, value) -> None:
         """Raise a DeprecationError if the tolerance flag is used."""
@@ -92,34 +110,29 @@ class Campaign(SerialMixin):
                 f"{self.__class__.__name__}.{Campaign.add_measurements.__name__}."
             )
 
+    @strategy.validator
+    def _validate_strategy(self, _, value) -> None:
+        """Raise a DeprecationError if the strategy attribute is used."""
+        if value is not None:
+            raise DeprecationError(
+                "Passing 'strategy' to the constructor is deprecated. The attribute "
+                "has been renamed to 'recommender'."
+            )
+
     @property
     def measurements(self) -> pd.DataFrame:
         """The experimental data added to the Campaign."""
         return self._measurements_exp
 
     @property
-    def parameters(self) -> List[Parameter]:
+    def parameters(self) -> tuple[Parameter, ...]:
         """The parameters of the underlying search space."""
         return self.searchspace.parameters
 
     @property
-    def targets(self) -> List[Target]:
+    def targets(self) -> tuple[Target, ...]:
         """The targets of the underlying objective."""
-        return self.objective.targets
-
-    @property
-    def _measurements_parameters_comp(self) -> pd.DataFrame:
-        """The computational representation of the measured parameters."""
-        if len(self._measurements_exp) < 1:
-            return pd.DataFrame()
-        return self.searchspace.transform(self._measurements_exp)
-
-    @property
-    def _measurements_targets_comp(self) -> pd.DataFrame:
-        """The computational representation of the measured targets."""
-        if len(self._measurements_exp) < 1:
-            return pd.DataFrame()
-        return self.objective.transform(self._measurements_exp)
+        return self.objective.targets if self.objective is not None else ()
 
     @classmethod
     def from_config(cls, config_json: str) -> Campaign:
@@ -203,7 +216,7 @@ class Campaign(SerialMixin):
                     f"The parameter '{param.name}' has missing values or NaNs in the "
                     f"provided dataframe. Missing parameter values are not supported."
                 )
-            if param.is_numeric and (data[param.name].dtype.kind not in "iufb"):
+            if param.is_numerical and (data[param.name].dtype.kind not in "iufb"):
                 raise TypeError(
                     f"The numerical parameter '{param.name}' has non-numeric entries in"
                     f" the provided dataframe."
@@ -236,7 +249,7 @@ class Campaign(SerialMixin):
 
     def recommend(
         self,
-        batch_size: int = 5,
+        batch_size: int,
         batch_quantity: int = None,  # type: ignore[assignment]
     ) -> pd.DataFrame:
         """Provide the recommendations for the next batch of experiments.
@@ -272,14 +285,14 @@ class Campaign(SerialMixin):
         # Update recommendation meta data
         if len(self._measurements_exp) > 0:
             self.n_fits_done += 1
-            self._measurements_exp["FitNr"].fillna(self.n_fits_done, inplace=True)
+            self._measurements_exp.fillna({"FitNr": self.n_fits_done}, inplace=True)
 
         # Get the recommended search space entries
-        rec = self.strategy.recommend(
-            self.searchspace,
+        rec = self.recommender.recommend(
             batch_size,
-            self._measurements_parameters_comp,
-            self._measurements_targets_comp,
+            self.searchspace,
+            self.objective,
+            self._measurements_exp,
         )
 
         # Cache the recommendations
@@ -293,10 +306,16 @@ class Campaign(SerialMixin):
 
 
 def _add_version(dict_: dict) -> dict:
-    """Add the package version to the created dictionary."""
+    """Add the package version to the given dictionary."""
     from baybe import __version__
 
     return {**dict_, "version": __version__}
+
+
+def _drop_version(dict_: dict) -> dict:
+    """Drop the package version from the given dictionary."""
+    dict_.pop("version", None)
+    return dict_
 
 
 # Register de-/serialization hooks
@@ -306,11 +325,21 @@ unstructure_hook = cattrs.gen.make_dict_unstructure_fn(
     _cattrs_include_init_false=True,
     # TODO: Remove once deprecation got expired:
     numerical_measurements_must_be_within_tolerance=cattrs.override(omit=True),
+    strategy=cattrs.override(omit=True),
 )
 structure_hook = cattrs.gen.make_dict_structure_fn(
-    Campaign, converter, _cattrs_include_init_false=True
+    Campaign, converter, _cattrs_include_init_false=True, _cattrs_forbid_extra_keys=True
 )
 converter.register_unstructure_hook(
     Campaign, lambda x: _add_version(unstructure_hook(x))
 )
-converter.register_structure_hook(Campaign, structure_hook)
+converter.register_structure_hook(
+    Campaign, lambda d, cl: structure_hook(_drop_version(d), cl)
+)
+
+
+# Converter for config validation
+_validation_converter = converter.copy()
+_validation_converter.register_structure_hook(
+    SearchSpace, validate_searchspace_from_config
+)

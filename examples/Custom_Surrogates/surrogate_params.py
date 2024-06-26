@@ -12,15 +12,18 @@
 import numpy as np
 
 from baybe.campaign import Campaign
-from baybe.objective import Objective
+from baybe.objectives import SingleTargetObjective
 from baybe.parameters import (
     CategoricalParameter,
     NumericalDiscreteParameter,
     SubstanceParameter,
 )
-from baybe.recommenders import FPSRecommender, SequentialGreedyRecommender
+from baybe.recommenders import (
+    BotorchRecommender,
+    FPSRecommender,
+    TwoPhaseMetaRecommender,
+)
 from baybe.searchspace import SearchSpace
-from baybe.strategies import TwoPhaseStrategy
 from baybe.surrogates import NGBoostSurrogate
 from baybe.targets import NumericalTarget
 from baybe.utils.dataframe import add_fake_results
@@ -71,8 +74,6 @@ except ValueError as e:
 
 ### Links for documentation
 
-# Note that `GaussianProcessSurrogate` will support custom parameters in the future
-
 # [`RandomForestModel`](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html)
 # [`NGBoostModel`](https://stanfordmlgroup.github.io/ngboost/1-useage.html)
 # [`BayesianLinearModel`](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.ARDRegression.html)
@@ -81,11 +82,9 @@ except ValueError as e:
 
 campaign = Campaign(
     searchspace=SearchSpace.from_product(parameters=parameters, constraints=None),
-    objective=Objective(
-        mode="SINGLE", targets=[NumericalTarget(name="Yield", mode="MAX")]
-    ),
-    strategy=TwoPhaseStrategy(
-        recommender=SequentialGreedyRecommender(surrogate_model=surrogate_model),
+    objective=SingleTargetObjective(target=NumericalTarget(name="Yield", mode="MAX")),
+    recommender=TwoPhaseMetaRecommender(
+        recommender=BotorchRecommender(surrogate_model=surrogate_model),
         initial_recommender=FPSRecommender(),
     ),
 )

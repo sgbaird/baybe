@@ -1,9 +1,11 @@
 """Tests for the searchspace module."""
+
+import numpy as np
 import pandas as pd
 import pytest
-import torch
 
 from baybe.constraints import (
+    ContinuousCardinalityConstraint,
     ContinuousLinearEqualityConstraint,
     ContinuousLinearInequalityConstraint,
     DiscreteSumConstraint,
@@ -41,8 +43,8 @@ def test_bounds_order():
         NumericalContinuousParameter(name="B_cont", bounds=(10.0, 12.0)),
     ]
     searchspace = SearchSpace.from_product(parameters=parameters)
-    expected = torch.tensor([[1.0, 7.0, 4.0, 10.0], [3.0, 9.0, 6.0, 12.0]]).double()
-    assert torch.equal(
+    expected = np.array([[1.0, 7.0, 4.0, 10.0], [3.0, 9.0, 6.0, 12.0]])
+    assert np.array_equal(
         searchspace.param_bounds_comp,
         expected,
     )
@@ -56,9 +58,9 @@ def test_empty_parameter_bounds():
     parameters = []
     searchspace_discrete = SubspaceDiscrete.from_product(parameters=parameters)
     searchspace_continuous = SubspaceContinuous(parameters=parameters)
-    expected = torch.empty(2, 0)
-    assert torch.equal(searchspace_discrete.param_bounds_comp, expected)
-    assert torch.equal(searchspace_continuous.param_bounds_comp, expected)
+    expected = np.empty((2, 0))
+    assert np.array_equal(searchspace_discrete.param_bounds_comp, expected)
+    assert np.array_equal(searchspace_continuous.param_bounds_comp, expected)
 
 
 def test_discrete_searchspace_creation_from_dataframe():
@@ -72,7 +74,7 @@ def test_discrete_searchspace_creation_from_dataframe():
         name="cat_unspecified", values=["d", "e", "f"]
     )
 
-    all_params = [num_specified, num_unspecified, cat_specified, cat_unspecified]
+    all_params = (num_specified, num_unspecified, cat_specified, cat_unspecified)
 
     df = pd.DataFrame({param.name: param.values for param in all_params})
     searchspace = SearchSpace(
@@ -86,10 +88,10 @@ def test_discrete_searchspace_creation_from_dataframe():
 
 def test_continuous_searchspace_creation_from_bounds():
     """A purely continuous search space is created from example bounds."""
-    parameters = [
+    parameters = (
         NumericalContinuousParameter("param1", (0, 1)),
         NumericalContinuousParameter("param2", (-1, 1)),
-    ]
+    )
     bounds = pd.DataFrame({p.name: p.bounds.to_tuple() for p in parameters})
     searchspace = SearchSpace(continuous=SubspaceContinuous.from_bounds(bounds))
 
@@ -110,10 +112,10 @@ def test_hyperrectangle_searchspace_creation():
     )
     searchspace = SearchSpace(continuous=SubspaceContinuous.from_dataframe(points))
 
-    parameters = [
+    parameters = (
         NumericalContinuousParameter("param1", (0, 2)),
         NumericalContinuousParameter("param2", (-1, 1)),
-    ]
+    )
 
     assert searchspace.type == SearchSpaceType.CONTINUOUS
     assert searchspace.parameters == parameters
@@ -182,5 +184,66 @@ def test_invalid_constraint_parameter_combos():
                 ContinuousLinearInequalityConstraint(
                     parameters=["c1", "e7", "d1"],
                 )
+            ],
+        )
+
+
+@pytest.mark.parametrize(
+    "parameter_names",
+    [
+        [
+            "Categorical_1",
+            "Categorical_2",
+            "Frame_A",
+            "Some_Setting",
+            "Num_disc_1",
+            "Fraction_1",
+            "Solvent_1",
+            "Custom_1",
+        ]
+    ],
+)
+def test_searchspace_memory_estimate(searchspace: SearchSpace):
+    """The memory estimate doesn't differ by more than 5% from the actual memory."""
+    estimate = searchspace.estimate_product_space_size(searchspace.parameters)
+    estimate_exp = estimate.exp_rep_bytes
+    estimate_comp = estimate.comp_rep_bytes
+
+    actual_exp = searchspace.discrete.exp_rep.memory_usage(deep=True, index=False).sum()
+    actual_comp = searchspace.discrete.comp_rep.memory_usage(
+        deep=True, index=False
+    ).sum()
+
+    assert 0.95 <= estimate_exp / actual_exp <= 1.05, (
+        "Exp: ",
+        estimate_exp,
+        actual_exp,
+    )
+    assert 0.95 <= estimate_comp / actual_comp <= 1.05, (
+        "Comp: ",
+        estimate_comp,
+        actual_comp,
+    )
+
+
+def test_cardinality_constraints_with_overlapping_parameters():
+    """Creating cardinality constraints with overlapping parameters raises an error."""
+    parameters = [
+        NumericalContinuousParameter("c1", (0, 1)),
+        NumericalContinuousParameter("c2", (0, 1)),
+        NumericalContinuousParameter("c3", (0, 1)),
+    ]
+    with pytest.raises(ValueError, match="cannot share the same parameters"):
+        SubspaceContinuous(
+            parameters=parameters,
+            constraints_nonlin=[
+                ContinuousCardinalityConstraint(
+                    parameters=["c1", "c2"],
+                    max_cardinality=1,
+                ),
+                ContinuousCardinalityConstraint(
+                    parameters=["c2", "c3"],
+                    max_cardinality=1,
+                ),
             ],
         )

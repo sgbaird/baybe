@@ -6,23 +6,25 @@ in our documentation tool, see https://github.com/sphinx-doc/sphinx/issues/11750
 Since we plan to refactor the surrogates, this part of the documentation will be
 available in the future. Thus, please have a look in the source code directly.
 """
+from __future__ import annotations
 
-from typing import Any, ClassVar, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, ClassVar
 
-import torch
 from attr import define, field
 from sklearn.linear_model import ARDRegression
-from torch import Tensor
 
 from baybe.searchspace import SearchSpace
 from baybe.surrogates.base import Surrogate
-from baybe.surrogates.utils import batchify, catch_constant_targets, scale_model
+from baybe.surrogates.utils import autoscale, batchify, catch_constant_targets
 from baybe.surrogates.validation import get_model_params_validator
+
+if TYPE_CHECKING:
+    from torch import Tensor
 
 
 @catch_constant_targets
-@scale_model
-@define
+@autoscale
+@define(slots=False)
 class BayesianLinearSurrogate(Surrogate):
     """A Bayesian linear regression surrogate model."""
 
@@ -34,19 +36,22 @@ class BayesianLinearSurrogate(Surrogate):
     # See base class.
 
     # Object variables
-    model_params: Dict[str, Any] = field(
+    model_params: dict[str, Any] = field(
         factory=dict,
         converter=dict,
         validator=get_model_params_validator(ARDRegression.__init__),
     )
-    # See base class.
+    """Optional model parameter that will be passed to the surrogate constructor."""
 
-    _model: Optional[ARDRegression] = field(init=False, default=None)
+    _model: ARDRegression | None = field(init=False, default=None, eq=False)
     """The actual model."""
 
     @batchify
-    def _posterior(self, candidates: Tensor) -> Tuple[Tensor, Tensor]:
+    def _posterior(self, candidates: Tensor) -> tuple[Tensor, Tensor]:
         # See base class.
+
+        import torch
+
         # Get predictions
         dists = self._model.predict(candidates.numpy(), return_std=True)
 

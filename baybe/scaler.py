@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, Tuple, Type
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import pandas as pd
-import torch
-from torch import Tensor
 
 from baybe.utils.dataframe import to_tensor
 
-_ScaleFun = Callable[[Tensor], Tensor]
+if TYPE_CHECKING:
+    from torch import Tensor
+
+    _ScaleFun = Callable[[Tensor], Tensor]
 
 
 class Scaler(ABC):
@@ -24,7 +26,7 @@ class Scaler(ABC):
     type: str
     """Class variable encoding the type of the scaler."""
 
-    SUBCLASSES: Dict[str, Type[Scaler]] = {}
+    SUBCLASSES: dict[str, type[Scaler]] = {}
     """Class variable for all subclasses"""
 
     def __init__(self, searchspace: pd.DataFrame):
@@ -38,7 +40,7 @@ class Scaler(ABC):
         self.unscale_s: _ScaleFun
 
     @abstractmethod
-    def fit_transform(self, x: Tensor, y: Tensor) -> Tuple[Tensor, Tensor]:
+    def fit_transform(self, x: Tensor, y: Tensor) -> tuple[Tensor, Tensor]:
         """Fit the scaler using the given training data and transform the data.
 
         Args:
@@ -65,7 +67,7 @@ class Scaler(ABC):
             raise RuntimeError("Scaler object must be fitted first.")
         return self.scale_x(x)
 
-    def untransform(self, mean: Tensor, variance: Tensor) -> Tuple[Tensor, Tensor]:
+    def untransform(self, mean: Tensor, variance: Tensor) -> tuple[Tensor, Tensor]:
         """Transform mean values and variances back to the original domain.
 
         Args:
@@ -97,8 +99,10 @@ class DefaultScaler(Scaler):
 
     def fit_transform(  # noqa: D102
         self, x: Tensor, y: Tensor
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor]:
         # See base class.
+
+        import torch
 
         # Get the searchspace boundaries
         searchspace = to_tensor(self.searchspace)

@@ -9,30 +9,37 @@
 
 ### Necessary imports for this example
 
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
 from baybe import Campaign
-from baybe.objective import Objective
+from baybe.objectives import SingleTargetObjective
 from baybe.parameters import NumericalContinuousParameter, NumericalDiscreteParameter
 from baybe.recommenders import (
-    NaiveHybridRecommender,
+    BotorchRecommender,
+    NaiveHybridSpaceRecommender,
     RandomRecommender,
-    SequentialGreedyRecommender,
+    TwoPhaseMetaRecommender,
 )
 from baybe.searchspace import SearchSpace
 from baybe.simulation import simulate_scenarios
-from baybe.strategies import TwoPhaseStrategy
 from baybe.targets import NumericalTarget
 
 ### Parameters for a full simulation loop
 
 # For the full simulation, we need to define some additional parameters.
 # These are the number of Monte Carlo runs and the number of experiments to be conducted per run.
+# `POINTS_PER_DIM` denotes how many points each discrete dimension should contain.
 
-N_MC_ITERATIONS = 2
-N_DOE_ITERATIONS = 2
+SMOKE_TEST = "SMOKE_TEST" in os.environ
+
+N_MC_ITERATIONS = 2 if SMOKE_TEST else 5
+N_DOE_ITERATIONS = 2 if SMOKE_TEST else 5
+POINTS_PER_DIM = 3 if SMOKE_TEST else 6
+
 
 ### Defining the test function.
 
@@ -72,13 +79,6 @@ if set(CONT_INDICES + DISC_INDICES) != set(range(DIMENSION)):
         "indices do not match."
     )
 
-# The following parameter decides how many points each discrete dimension should have.
-# Note that this example uses the `SequentialGreedyRecommender` (among others).
-# This recommender performs a brute-force optimization over the discrete subspace.
-# We thus heavily advise to keep the number of discrete parameters and points rather small here.
-
-POINTS_PER_DIM = 6
-
 
 # Construct the continuous parameters as NumericContinuous parameters.
 
@@ -107,16 +107,14 @@ parameters = cont_parameters + disc_parameters
 
 # Construct searchspace and objective.
 searchspace = SearchSpace.from_product(parameters=parameters)
-objective = Objective(
-    mode="SINGLE", targets=[NumericalTarget(name="Target", mode="MIN")]
-)
+objective = SingleTargetObjective(target=NumericalTarget(name="Target", mode="MIN"))
 
 ### Constructing campaigns for the simulation loop
 
 # This example compares three different available hybrid recommenders:
-# The `SequentialGreedyRecommender`, the `NaiveHybridRecommedner` and the `RandomRecommender`.
-# For each of them, we initialize one strategy object.
-# Note that it is possible to further specify the behavior of the `SequentialGreedyRecommender`.
+# The `BotorchRecommender`, the `NaiveHybridSpaceRecommender` and the `RandomRecommender`.
+# For each of them, we initialize one recommender object.
+# Note that it is possible to further specify the behavior of the `BotorchRecommender`.
 # Using the two keywords `hybrid_sampler` and `sampling_percentage`, one can control
 # - how much of the discrete subspace should be explored
 # - how these points should be sampled.
@@ -124,29 +122,29 @@ objective = Objective(
 # Note that the recommender performs one optimization of the continuous subspace per sampled point.
 # We thus recommend to keep this parameter rather low.
 
-seq_greedy_strategy = TwoPhaseStrategy(
-    recommender=SequentialGreedyRecommender(
-        hybrid_sampler="Farthest", sampling_percentage=0.3
-    ),
+seq_greedy_recommender = TwoPhaseMetaRecommender(
+    recommender=BotorchRecommender(hybrid_sampler="FPS", sampling_percentage=0.3),
 )
-naive_hybrid_strategy = TwoPhaseStrategy(recommender=NaiveHybridRecommender())
-random_strategy = TwoPhaseStrategy(recommender=RandomRecommender())
+naive_hybrid_recommender = TwoPhaseMetaRecommender(
+    recommender=NaiveHybridSpaceRecommender()
+)
+random_recommender = TwoPhaseMetaRecommender(recommender=RandomRecommender())
 
-# We now create one campaign per strategy.
+# We now create one campaign per recommender.
 
 seq_greedy_campaign = Campaign(
     searchspace=searchspace,
-    strategy=seq_greedy_strategy,
+    recommender=seq_greedy_recommender,
     objective=objective,
 )
 naive_hybrid_campaign = Campaign(
     searchspace=searchspace,
-    strategy=naive_hybrid_strategy,
+    recommender=naive_hybrid_recommender,
     objective=objective,
 )
 random_campaign = Campaign(
     searchspace=searchspace,
-    strategy=random_strategy,
+    recommender=random_recommender,
     objective=objective,
 )
 

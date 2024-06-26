@@ -9,6 +9,7 @@ from attrs import NOTHING
 from cattrs.errors import IterableValidationError
 from pytest import param
 
+from baybe._optional.info import CHEM_INSTALLED
 from baybe.parameters.categorical import (
     CategoricalParameter,
     TaskParameter,
@@ -21,8 +22,6 @@ from baybe.parameters.numerical import (
 from baybe.parameters.substance import SubstanceParameter
 from baybe.parameters.validation import validate_decorrelation
 from baybe.utils.interval import InfiniteIntervalError
-
-from ..conftest import _CHEM_INSTALLED
 
 try:  # For python < 3.11, use the exceptiongroup backport
     ExceptionGroup
@@ -49,6 +48,8 @@ def test_invalid_parameter_name(name, error):
         param(1, TypeError, id="wrong_type"),
         param(1.0, ValueError, id="too_high"),
         param(0.0, ValueError, id="too_low"),
+        param(float("nan"), ValueError, id="nan"),
+        param(float("inf"), ValueError, id="inf"),
     ],
 )
 def test_invalid_decorrelation(decorrelation, error):
@@ -74,16 +75,17 @@ def test_invalid_values_numerical_discrete_parameter(values, error):
 
 
 @pytest.mark.parametrize(
-    "bounds",
+    ("bounds", "error"),
     [
-        param([-np.inf, np.inf], id="infinite"),
-        param([0, np.inf], id="open_right"),
-        param([-np.inf, 0], id="open_left"),
+        param([-np.inf, np.inf], InfiniteIntervalError, id="infinite"),
+        param([0, np.inf], InfiniteIntervalError, id="open_right"),
+        param([-np.inf, 0], InfiniteIntervalError, id="open_left"),
+        param([0, 0], ValueError, id="degenerate"),
     ],
 )
-def test_invalid_bounds_numerical_continuous_parameter(bounds):
+def test_invalid_bounds_numerical_continuous_parameter(bounds, error):
     """Creating an unbounded parameter raises an exception."""
-    with pytest.raises(InfiniteIntervalError):
+    with pytest.raises(error):
         NumericalContinuousParameter(name="invalid_values", bounds=bounds)
 
 
@@ -127,7 +129,7 @@ def test_invalid_values_task_parameter(values, active_values, error):
 
 
 @pytest.mark.skipif(
-    not _CHEM_INSTALLED, reason="Optional chem dependency not installed."
+    not CHEM_INSTALLED, reason="Optional chem dependency not installed."
 )
 @pytest.mark.parametrize(
     ("data", "error"),
@@ -150,7 +152,7 @@ def test_invalid_data_substance_parameter(data, error):
 
 
 @pytest.mark.skipif(
-    not _CHEM_INSTALLED, reason="Optional chem dependency not installed."
+    not CHEM_INSTALLED, reason="Optional chem dependency not installed."
 )
 def test_invalid_encoding_substance_parameter():
     """Providing an invalid encoding raises an exception."""

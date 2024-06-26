@@ -6,11 +6,11 @@ Surrogate models are used to model and estimate the unknown objective function o
 
 BayBE provides a comprehensive selection of surrogate models, empowering you to choose the most suitable option for your specific needs. The following surrogate models are available within BayBE:
 
-* [`GaussianProcessSurrogate`](baybe.surrogates.gaussian_process.GaussianProcessSurrogate)
-* `BayesianLinearSurrogate`
+* [`GaussianProcessSurrogate`](baybe.surrogates.gaussian_process.core.GaussianProcessSurrogate)
+* [`BayesianLinearSurrogate`](baybe.surrogates.linear.BayesianLinearSurrogate)
 * [`MeanPredictionSurrogate`](baybe.surrogates.naive.MeanPredictionSurrogate)
-* `NGBoostSurrogate`
-* `RandomForestSurrogate`
+* [`NGBoostSurrogate`](baybe.surrogates.ngboost.NGBoostSurrogate)
+* [`RandomForestSurrogate`](baybe.surrogates.random_forest.RandomForestSurrogate)
 
 
 ## Using custom models

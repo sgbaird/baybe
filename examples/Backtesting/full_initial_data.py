@@ -10,17 +10,18 @@
 
 ### Necessary imports for this example
 
+import os
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
 from baybe import Campaign
-from baybe.objective import Objective
+from baybe.objectives import SingleTargetObjective
 from baybe.parameters import NumericalDiscreteParameter, SubstanceParameter
-from baybe.recommenders import RandomRecommender
+from baybe.recommenders import RandomRecommender, TwoPhaseMetaRecommender
 from baybe.searchspace import SearchSpace
 from baybe.simulation import simulate_scenarios
-from baybe.strategies import TwoPhaseStrategy
 from baybe.targets import NumericalTarget
 
 ### Parameters for a full simulation loop
@@ -29,7 +30,10 @@ from baybe.targets import NumericalTarget
 # Since this example uses initial data, we only need to define the number of iterations per run.
 # The number of runs is determined by the number of initial data points provided.
 
-N_DOE_ITERATIONS = 5
+SMOKE_TEST = "SMOKE_TEST" in os.environ
+
+N_DOE_ITERATIONS = 2 if SMOKE_TEST else 5
+BATCH_SIZE = 1 if SMOKE_TEST else 3
 
 ### Lookup functionality and data creation
 
@@ -100,9 +104,7 @@ concentration = NumericalDiscreteParameter(
 parameters = [solvent, base, ligand, temperature, concentration]
 
 searchspace = SearchSpace.from_product(parameters=parameters)
-objective = Objective(
-    mode="SINGLE", targets=[NumericalTarget(name="yield", mode="MAX")]
-)
+objective = SingleTargetObjective(target=NumericalTarget(name="yield", mode="MAX"))
 
 ### Constructing campaigns for the simulation loop
 
@@ -112,7 +114,7 @@ objective = Objective(
 campaign = Campaign(searchspace=searchspace, objective=objective)
 campaign_rand = Campaign(
     searchspace=searchspace,
-    strategy=TwoPhaseStrategy(recommender=RandomRecommender()),
+    recommender=TwoPhaseMetaRecommender(recommender=RandomRecommender()),
     objective=objective,
 )
 
@@ -128,7 +130,7 @@ scenarios = {"Test_Scenario": campaign, "Random": campaign_rand}
 results = simulate_scenarios(
     scenarios,
     lookup,
-    batch_size=3,
+    batch_size=BATCH_SIZE,
     n_doe_iterations=N_DOE_ITERATIONS,
     initial_data=initial_data,
 )

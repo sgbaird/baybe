@@ -4,6 +4,201 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Breaking Changes
+- Providing an explicit `batch_size` is now mandatory when asking for recommendations
+- `RecommenderProtocol.recommend` now accepts an optional `Objective` 
+- `RecommenderProtocol.recommend` now expects training data to be provided as a single
+  dataframe in experimental representation instead of two separate dataframes in
+  computational representation
+- `Parameter.is_numeric` has been replaced with `Parameter.is_numerical`
+
+### Added
+- `Surrogate` base class now exposes a `to_botorch` method
+- `SubspaceDiscrete.to_searchspace` and `SubspaceContinuous.to_searchspace`
+  convenience constructor
+- Validators for `Campaign` attributes
+_ `_optional` subpackage for managing optional dependencies
+- Acquisition function for active learning: `qNIPV`
+- Abstract `ContinuousNonlinearConstraint` class
+- `ContinuousCardinalityConstraint` class and corresponding uniform sampling mechanism
+- `register_hooks` utility enabling user-defined augmentation of arbitrary callables
+
+### Changed
+- Passing an `Objective` to `Campaign` is now optional
+- `GaussianProcessSurrogate` models are no longer wrapped when cast to BoTorch
+- Restrict upper versions of main dependencies, motivated by major `numpy` release
+- Sampling methods in `qNIPV` and `BotorchRecommender` are now specified via 
+  `DiscreteSamplingMethod` enum
+- `Interval` class now supports degenerate intervals containing only one element
+
+### Removed
+- Support for Python 3.9 removed due to new [BoTorch requirements](https://github.com/pytorch/botorch/pull/2293) 
+  and guidelines from [Scientific Python](https://scientific-python.org/specs/spec-0000/)
+
+### Fixed
+- `sequential` flag of `SequentialGreedyRecommender` is now set to `True`
+
+### Deprecations
+- `SequentialGreedyRecommender` class replaced with `BotorchRecommender`
+- `SubspaceContinuous.samples_random` has been replaced with
+  `SubspaceContinuous.sample_uniform`
+- `SubspaceContinuous.samples_full_factorial` has been replaced with
+  `SubspaceContinuous.sample_from_full_factorial`
+
+## [0.9.1] - 2024-06-04
+### Changed
+- Discrete searchspace memory estimate is now natively represented in bytes 
+
+### Fixed
+- Non-GP surrogates not working with `deepcopy` and the simulation package due to
+  slotted base class
+- Datatype inconsistencies for various parameters' `values` and `comp_df` and 
+  `SubSelectionCondition`'s `selection` related to floating point precision
+
+## [0.9.0] - 2024-05-21
+### Added
+- Class hierarchy for objectives
+- `AdditiveKernel`, `LinearKernel`, `MaternKernel`, `PeriodicKernel`, 
+  `PiecewisePolynomialKernel`, `PolynomialKernel`, `ProductKernel`, `RBFKernel`, 
+  `RFFKernel`, `RQKernel`, `ScaleKernel` classes
+- `KernelFactory` protocol enabling context-dependent construction of kernels
+- Preset mechanism for `GaussianProcessSurrogate`
+- `hypothesis` strategies and roundtrip test for kernels, constraints, objectives,
+  priors and acquisition functions
+- New acquisition functions: `qSR`, `qNEI`, `LogEI`, `qLogEI`, `qLogNEI`
+- `GammaPrior`, `HalfCauchyPrior`, `NormalPrior`, `HalfNormalPrior`, `LogNormalPrior`
+  and `SmoothedBoxPrior` classes
+- Possibility to deserialize classes from optional class name abbreviations
+- Basic deserialization tests using different class type specifiers
+- Serialization user guide
+- Environment variables user guide
+- Utility for estimating memory requirements of discrete product search space
+- `mypy` for search space and objectives
+
+### Changed
+- Reorganized acquisition.py into `acquisition` subpackage
+- Reorganized simulation.py into `simulation` subpackage
+- Reorganized gaussian_process.py into `gaussian_process` subpackage
+- Acquisition functions are now their own objects
+- `acquisition_function_cls` constructor parameter renamed to `acquisition_function`
+- User guide now explains the new objective classes
+- Telemetry deactivation warning is only shown to developers
+- `torch`, `gpytorch` and `botorch` are lazy-loaded for improved startup time
+- If an exception is encountered during simulation, incomplete results are returned 
+  with a warning instead of passing through the uncaught exception
+- Environment variables `BAYBE_NUMPY_USE_SINGLE_PRECISION` and
+  `BAYBE_TORCH_USE_SINGLE_PRECISION` to enforce single point precision usage
+
+### Removed
+- `model_params` attribute from `Surrogate` base class, `GaussianProcessSurrogate` and
+  `CustomONNXSurrogate`
+- Dependency on `requests` package
+  
+### Fixed
+- `n_task_params` now evaluates to 1 if `task_idx == 0`
+- Simulation no longer fails in `ignore` mode when lookup dataframe contains duplicate
+  parameter configurations
+- Simulation no longer fails for targets in `MATCH` mode
+- `closest_element` now works for array-like input of all kinds
+- Structuring concrete subclasses no longer requires providing an explicit `type` field
+- `_target(s)` attributes of `Objectives` are now de-/serialized without leading
+  underscore to support user-friendly serialization strings
+- Telemetry does not execute any code if it was disabled
+- Running simulations no longer alters the states of the global random number generators
+
+### Deprecations
+- The former `baybe.objective.Objective` class has been replaced with
+  `SingleTargetObjective` and `DesirabilityObjective`
+- `acquisition_function_cls` constructor parameter for `BayesianRecommender`
+- `VarUCB` and `qVarUCB` acquisition functions
+
+### Expired Deprecations (from 0.6.*)
+- `BayBE` class
+- `baybe.surrogate` module
+- `baybe.targets.Objective` class
+- `baybe.strategies.Strategy` class
+
+## [0.8.2] - 2024-03-27
+### Added
+- Simulation user guide
+- Example for transfer learning backtesting utility
+- `pyupgrade` pre-commit hook
+- Better human readable `__str__` representation of objective and targets
+- Alternative dataframe deserialization from `pd.DataFrame` constructors
+
+### Changed
+- More detailed and sophisticated search space user guide
+- Support for Python 3.12
+- Upgraded syntax to Python 3.9
+- Bumped `onnx` version to fix vulnerability
+- Increased threshold for low-dimensional GP priors
+- Replaced `fit_gpytorch_mll_torch` with `fit_gpytorch_mll`
+- Use `tox-uv` in pipelines
+
+### Fixed
+- `telemetry` dependency is no longer a group (enables Poetry installation)
+
+## [0.8.1] - 2024-03-11
+### Added
+- Better human readable `__str__` representation of campaign
+- README now contains an example on substance encoding results
+- Transfer learning user guide
+- `from_simplex` constructor now also takes and applies optional constraints
+
+### Changed
+- Full lookup backtesting example now tests different substance encodings
+- Replaced unmaintained `mordred` dependency by `mordredcommunity`
+- `SearchSpace`s now use `ndarray` instead of `Tensor`
+
+### Fixed
+- `from_simplex` now efficiently validated in `Campaign.validate_config`
+
+## [0.8.0] - 2024-02-29
+### Changed
+- BoTorch dependency bumped to `>=0.9.3`
+
+### Removed
+- Workaround for BoTorch hybrid recommender data type
+- Support for Python 3.8
+
+## [0.7.4] - 2024-02-28
+### Added
+- Subpackages for the available recommender types
+- Multi-style plotting capabilities for generated example plots
+- JSON file for plotting themes
+- Smoke testing in relevant tox environments
+- `ContinuousParameter` base class
+- New environment variable `BAYBE_CACHE_DIR` that can customize the disk cache directory
+  or turn off disk caching entirely
+- Options to control the number of nonzero parameters in `SubspaceDiscrete.from_simplex`
+- Temporarily ignore ONNX vulnerabilities
+- Better human readable `__str__` representation of search spaces
+- `pretty_print_df` function for printing shortened versions of dataframes
+- Basic Transfer Learning example
+- Repo now has reminders (https://github.com/marketplace/actions/issue-reminder) enabled
+- `mypy` for recommenders
+
+### Changed
+- `Recommender`s now share their core logic via their base class
+- Remove progress bars in examples
+- Strategies are now called `MetaRecommender`'s and part of the `recommenders.meta`
+  module
+- `Recommender`'s are now called `PureRecommender`'s and part of the `recommenders.pure`
+  module
+- `strategy` keyword of `Campaign` renamed to `recommender`
+- `NaiveHybridRecommender` renamed to `NaiveHybridSpaceRecommender`
+
+### Fixed
+- Unhandled exception in telemetry when username could not be inferred on Windows
+- Metadata is now correctly updated for hybrid spaces
+- Unintended deactivation of telemetry due to import problem
+- Line wrapping in examples
+
+### Deprecations
+- `TwoPhaseStrategy`, `SequentialStrategy` and `StreamingSequentialStrategy` have been
+  replaced with their new `MetaRecommender` versions
+
 ## [0.7.3] - 2024-02-09
 ### Added
 - Copy button for code blocks in documentation
@@ -66,7 +261,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Wrong use of `tolerance` argument in constraints user guide
 - Errors with generics and type aliases in documentation
-- Deduplication bug in substance_data hypothesis 
+- Deduplication bug in substance_data `hypothesis` strategy
 - Use pydoclint as flake8 plugin and not as a stand-alone linter
 - Margins in documentation for desktop and mobile version
 - `Interval`s can now also be deserialized from a bounds iterable
@@ -81,7 +276,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Specifying target configs without explicit type information is deprecated
 - Specifying parameters/constraints at the top level of a campaign configuration JSON is
   deprecated. Instead, an explicit `searchspace` field must be provided with an optional
-  `constructor` entry.
+  `constructor` entry
 
 ## [0.7.1] - 2023-12-07
 ### Added
@@ -201,7 +396,7 @@ or continuous parameters
 
 ## [0.4.2] - 2023-08-29
 ### Added
-- Test environments for multiple python versions via `tox`
+- Test environments for multiple Python versions via `tox`
 
 ### Changed
 - Removed `environment.yml`

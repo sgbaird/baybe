@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from enum import Enum
-from typing import List, Optional, cast
+from typing import cast
 
+import numpy as np
 import pandas as pd
-import torch
 from attr import define, field
 
 from baybe.constraints import (
@@ -14,15 +15,15 @@ from baybe.constraints import (
     ContinuousLinearInequalityConstraint,
     validate_constraints,
 )
-from baybe.constraints.base import Constraint, DiscreteConstraint
-from baybe.parameters import (
-    NumericalContinuousParameter,
-    SubstanceEncoding,
-    TaskParameter,
-)
-from baybe.parameters.base import DiscreteParameter, Parameter
+from baybe.constraints.base import Constraint, ContinuousNonlinearConstraint
+from baybe.parameters import SubstanceEncoding, TaskParameter
+from baybe.parameters.base import Parameter
 from baybe.searchspace.continuous import SubspaceContinuous
-from baybe.searchspace.discrete import SubspaceDiscrete
+from baybe.searchspace.discrete import (
+    MemorySize,
+    SubspaceDiscrete,
+    validate_simplex_subspace_from_config,
+)
 from baybe.searchspace.validation import validate_parameters
 from baybe.serialization import SerialMixin, converter, select_constructor_hook
 from baybe.telemetry import TELEM_LABELS, telemetry_record_value
@@ -66,6 +67,21 @@ class SearchSpace(SerialMixin):
     continuous: SubspaceContinuous = field(factory=SubspaceContinuous.empty)
     """The (potentially empty) continuous subspace of the overall search space."""
 
+    def __str__(self) -> str:
+        start_bold = "\033[1m"
+        end_bold = "\033[0m"
+        head_str = f"""{start_bold}Search Space{end_bold}
+        \n{start_bold}Search Space Type: {end_bold}{self.type.name}"""
+
+        # Check the sub space size to avoid adding unwanted break lines
+        # if the sub space is empty
+        discrete_str = f"\n\n{self.discrete}" if not self.discrete.is_empty else ""
+        continuous_str = (
+            f"\n\n{self.continuous}" if not self.continuous.is_empty else ""
+        )
+        searchspace_str = f"{head_str}{discrete_str}{continuous_str}"
+        return searchspace_str.replace("\n", "\n ").replace("\r", "\r ")
+
     def __attrs_post_init__(self):
         """Perform validation and record telemetry values."""
         validate_parameters(self.parameters)
@@ -82,8 +98,8 @@ class SearchSpace(SerialMixin):
     @classmethod
     def from_product(
         cls,
-        parameters: List[Parameter],
-        constraints: Optional[List[Constraint]] = None,
+        parameters: Sequence[Parameter],
+        constraints: Sequence[Constraint] | None = None,
         empty_encoding: bool = False,
     ) -> SearchSpace:
         """Create a search space from a cartesian product.
@@ -118,29 +134,24 @@ class SearchSpace(SerialMixin):
             constraints = []
 
         discrete: SubspaceDiscrete = SubspaceDiscrete.from_product(
-            parameters=[
-                cast(DiscreteParameter, p) for p in parameters if p.is_discrete
-            ],
-            constraints=[
-                cast(DiscreteConstraint, c) for c in constraints if c.is_discrete
-            ],
+            parameters=[p for p in parameters if p.is_discrete],  # type:ignore[misc]
+            constraints=[c for c in constraints if c.is_discrete],  # type:ignore[misc]
             empty_encoding=empty_encoding,
         )
         continuous: SubspaceContinuous = SubspaceContinuous(
-            parameters=[
-                cast(NumericalContinuousParameter, p)
-                for p in parameters
-                if not p.is_discrete
-            ],
-            constraints_lin_eq=[
-                cast(ContinuousLinearEqualityConstraint, c)
+            parameters=[p for p in parameters if p.is_continuous],  # type:ignore[misc]
+            constraints_lin_eq=[  # type:ignore[misc]
+                c
                 for c in constraints
                 if isinstance(c, ContinuousLinearEqualityConstraint)
             ],
-            constraints_lin_ineq=[
-                cast(ContinuousLinearInequalityConstraint, c)
+            constraints_lin_ineq=[  # type:ignore[misc]
+                c
                 for c in constraints
                 if isinstance(c, ContinuousLinearInequalityConstraint)
+            ],
+            constraints_nonlin=[
+                c for c in constraints if isinstance(c, ContinuousNonlinearConstraint)
             ],
         )
 
@@ -150,7 +161,7 @@ class SearchSpace(SerialMixin):
     def from_dataframe(
         cls,
         df: pd.DataFrame,
-        parameters: List[Parameter],
+        parameters: Sequence[Parameter],
     ) -> SearchSpace:
         """Create a search space from a specified set of parameter configurations.
 
@@ -171,36 +182,39 @@ class SearchSpace(SerialMixin):
         Raises:
             ValueError: If the dataframe columns do not match with the parameters.
         """
-        if set(p.name for p in parameters) != set(df.columns.values):
+        if {p.name for p in parameters} != set(df.columns.values):
             raise ValueError(
                 "The provided dataframe columns must match exactly with the specified "
                 "parameter names."
             )
 
         disc_params = [p for p in parameters if p.is_discrete]
-        cont_params = [p for p in parameters if not p.is_discrete]
+        cont_params = [p for p in parameters if p.is_continuous]
 
         return SearchSpace(
             discrete=SubspaceDiscrete.from_dataframe(
-                df[[p.name for p in disc_params]], disc_params
+                df[[p.name for p in disc_params]],
+                disc_params,  # type:ignore[arg-type]
             ),
             continuous=SubspaceContinuous.from_dataframe(
-                df[[p.name for p in cont_params]], cont_params
+                df[[p.name for p in cont_params]],
+                cont_params,  # type:ignore[arg-type]
             ),
         )
 
     @property
-    def parameters(self) -> List[Parameter]:
+    def parameters(self) -> tuple[Parameter, ...]:
         """Return the list of parameters of the search space."""
-        return self.discrete.parameters + self.continuous.parameters
+        return (*self.discrete.parameters, *self.continuous.parameters)
 
     @property
-    def constraints(self) -> List[Constraint]:
+    def constraints(self) -> tuple[Constraint, ...]:
         """Return the constraints of the search space."""
         return (
-            self.discrete.constraints
-            + self.continuous.constraints_lin_eq
-            + self.continuous.constraints_lin_ineq
+            *self.discrete.constraints,
+            *self.continuous.constraints_lin_eq,
+            *self.continuous.constraints_lin_ineq,
+            *self.continuous.constraints_nonlin,
         )
 
     @property
@@ -229,14 +243,14 @@ class SearchSpace(SerialMixin):
         )
 
     @property
-    def param_bounds_comp(self) -> torch.Tensor:
+    def param_bounds_comp(self) -> np.ndarray:
         """Return bounds as tensor."""
-        return torch.hstack(
+        return np.hstack(
             [self.discrete.param_bounds_comp, self.continuous.param_bounds_comp]
         )
 
     @property
-    def task_idx(self) -> Optional[int]:
+    def task_idx(self) -> int | None:
         """The column index of the task parameter in computational representation."""
         try:
             # TODO [16932]: Redesign metadata handling
@@ -245,13 +259,14 @@ class SearchSpace(SerialMixin):
             )
         except StopIteration:
             return None
-        # TODO[11611]: The current approach has two limitations:
+        # TODO[11611]: The current approach has three limitations:
         #   1.  It matches by column name and thus assumes that the parameter name
         #       is used as the column name.
         #   2.  It relies on the current implementation detail that discrete parameters
         #       appear first in the computational dataframe.
+        #   3.  It assumes there exists exactly one task parameter
         #   --> Fix this when refactoring the data
-        return self.discrete.comp_rep.columns.get_loc(task_param.name)
+        return cast(int, self.discrete.comp_rep.columns.get_loc(task_param.name))
 
     @property
     def n_tasks(self) -> int:
@@ -269,6 +284,22 @@ class SearchSpace(SerialMixin):
         # When there are no task parameters, we effectively have a single task
         except StopIteration:
             return 1
+
+    @staticmethod
+    def estimate_product_space_size(parameters: Iterable[Parameter]) -> MemorySize:
+        """Estimate an upper bound for the memory size of a product space.
+
+        Continuous parameters are ignored because creating a continuous subspace has
+        no considerable memory footprint.
+
+        Args:
+            parameters: The parameters spanning the product space.
+
+        Returns:
+            The estimated memory size.
+        """
+        discrete_parameters = [p for p in parameters if p.is_discrete]
+        return SubspaceDiscrete.estimate_product_space_size(discrete_parameters)  # type: ignore[arg-type]
 
     def transform(
         self,
@@ -298,19 +329,28 @@ class SearchSpace(SerialMixin):
 
 def validate_searchspace_from_config(specs: dict, _) -> None:
     """Validate the search space specifications while skipping costly creation steps."""
-    # For product spaces, only validate the inputs
+    # Validate product inputs without constructing it
     if specs.get("constructor", None) == "from_product":
-        parameters = converter.structure(specs["parameters"], List[Parameter])
+        parameters = converter.structure(specs["parameters"], list[Parameter])
         validate_parameters(parameters)
 
         constraints = specs.get("constraints", None)
         if constraints:
-            constraints = converter.structure(specs["constraints"], List[Constraint])
+            constraints = converter.structure(specs["constraints"], list[Constraint])
             validate_constraints(constraints, parameters)
 
-    # For all other types, validate by construction
     else:
-        converter.structure(specs, SearchSpace)
+        discrete_subspace_specs = specs.get("discrete", {})
+        if discrete_subspace_specs.get("constructor", None) == "from_simplex":
+            # Validate discrete simplex subspace
+            _validation_converter = converter.copy()
+            _validation_converter.register_structure_hook(
+                SubspaceDiscrete, validate_simplex_subspace_from_config
+            )
+            _validation_converter.structure(discrete_subspace_specs, SubspaceDiscrete)
+        else:
+            # For all other types, validate by construction
+            converter.structure(specs, SearchSpace)
 
 
 # Register deserialization hook

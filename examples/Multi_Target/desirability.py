@@ -8,8 +8,10 @@
 
 ### Necessary imports for this example
 
+import pandas as pd
+
 from baybe import Campaign
-from baybe.objective import Objective
+from baybe.objectives import DesirabilityObjective
 from baybe.parameters import CategoricalParameter, NumericalDiscreteParameter
 from baybe.searchspace import SearchSpace
 from baybe.targets import NumericalTarget
@@ -75,7 +77,7 @@ Target_3 = NumericalTarget(
 targets = [Target_1, Target_2, Target_3]
 
 # As the recommender requires a single function, the different targets need to be combined.
-# Thus, a `combine_function` is used to create a single target out of the several targets given.
+# Thus, a `scalarizer` is used to create a single target out of the several targets given.
 # The combine function can either be the mean `MEAN` or the geometric mean `GEOM_MEAN`.
 # Per default, `GEOM_MEAN` is used.
 # Weights for each target can also be specified as a list of floats in the arguments
@@ -83,11 +85,10 @@ targets = [Target_1, Target_2, Target_3]
 # It is thus not necessary to handle normalization or scaling.
 
 
-objective = Objective(
-    mode="DESIRABILITY",
+objective = DesirabilityObjective(
     targets=targets,
     weights=[20, 20, 60],
-    combine_func="MEAN",
+    scalarizer="MEAN",
 )
 
 print(objective)
@@ -105,19 +106,16 @@ print(campaign)
 N_ITERATIONS = 3
 
 for kIter in range(N_ITERATIONS):
-    print(f"\n\n#### ITERATION {kIter+1} ####")
-
     rec = campaign.recommend(batch_size=3)
-    print("\nRecommended measurements:\n", rec)
-
     add_fake_results(rec, campaign)
-    print("\nRecommended measurements with fake measured results:\n", rec)
-
     campaign.add_measurements(rec)
+    desirability = campaign.objective.transform(campaign.measurements)
 
-    print("\n\nInternal measurement dataframe computational representation Y:\n")
-    print(campaign._measurements_targets_comp)
-
+    print(f"\n\n#### ITERATION {kIter+1} ####")
+    print("\nRecommended measurements with fake measured results:\n")
+    print(rec)
+    print("\nInternal measurement database with desirability values:\n")
+    print(pd.concat([campaign.measurements, desirability], axis=1))
 
 ### Addendum: Description of `transformation` functions
 

@@ -5,13 +5,20 @@ on:
     types:
       - published
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force'
+        default: false
+        required: false
+        type: boolean
+      tag:
+        description: 'Specify tag (empty builds branch HEAD)'
+        required: false
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
-
-env:
-  BAYBE_DOCS_LINKCHECK_IGNORE: true  # Ignore link checks to github.io (pages might not yet exist)
 
 jobs:
   build:
@@ -22,16 +29,18 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-python@v5
-        with: {python-version: "3.9"}
-      - name: Build Docs
-        run: |
-          pip install tox
-          tox -e docs-py39
+        with: {python-version: "3.10"}
+      - name: Install tox
+        run: pip install tox-uv
+      - name: Build Docs ${{ inputs.force == true && '(Force)' || '' }}
+        run: tox -e docs-py310 ${{ inputs.force == true && '-- -f -r' || '-- -r' }}
       - name: Upload docs artifact
         uses: actions/upload-pages-artifact@v1
         with:
-          path: 'build/docs'
+          path: 'docs/build'
 
   deploy:
     needs: build

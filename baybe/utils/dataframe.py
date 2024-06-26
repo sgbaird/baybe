@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Tuple, Union
+from collections.abc import Iterable, Iterator, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Literal,
+    overload,
+)
 
 import numpy as np
 import pandas as pd
-import torch
-from torch import Tensor
 
 from baybe.targets.enum import TargetMode
-from baybe.utils.numerical import DTypeFloatNumpy, DTypeFloatTorch
+from baybe.utils.numerical import DTypeFloatNumpy
 
 if TYPE_CHECKING:
+    from torch import Tensor
+
     from baybe.campaign import Campaign
     from baybe.parameters import Parameter
 
@@ -21,7 +26,17 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
-def to_tensor(*dfs: pd.DataFrame) -> Union[Tensor, Iterable[Tensor]]:
+@overload
+def to_tensor(df: pd.DataFrame) -> Tensor:
+    ...
+
+
+@overload
+def to_tensor(*dfs: pd.DataFrame) -> Iterator[Tensor]:
+    ...
+
+
+def to_tensor(*dfs: pd.DataFrame) -> Tensor | Iterator[Tensor]:
     """Convert a given set of dataframes into tensors (dropping all indices).
 
     Args:
@@ -37,6 +52,10 @@ def to_tensor(*dfs: pd.DataFrame) -> Union[Tensor, Iterable[Tensor]]:
     #  floats. As a simple fix (this seems to be the most reasonable place to take
     #  care of this) df.values has been changed to df.values.astype(float),
     #  even though this seems like double casting here.
+    import torch
+
+    from baybe.utils.torch import DTypeFloatTorch
+
     out = (
         torch.from_numpy(df.values.astype(DTypeFloatNumpy)).to(DTypeFloatTorch)
         for df in dfs
@@ -49,9 +68,9 @@ def to_tensor(*dfs: pd.DataFrame) -> Union[Tensor, Iterable[Tensor]]:
 def add_fake_results(
     data: pd.DataFrame,
     campaign: Campaign,
-    good_reference_values: Optional[Dict[str, list]] = None,
-    good_intervals: Optional[Dict[str, Tuple[float, float]]] = None,
-    bad_intervals: Optional[Dict[str, Tuple[float, float]]] = None,
+    good_reference_values: dict[str, list] | None = None,
+    good_intervals: dict[str, tuple[float, float]] | None = None,
+    bad_intervals: dict[str, tuple[float, float]] | None = None,
 ) -> None:
     """Add fake results to a dataframe which was the result of a BayBE recommendation.
 
@@ -218,7 +237,7 @@ def add_parameter_noise(
             "'absolute' or 'relative_percent'."
         )
 
-    for param in (p for p in parameters if p.is_numeric):
+    for param in (p for p in parameters if p.is_numerical):
         # Add selected noise type
         if noise_type == "relative_percent":
             data[param.name] *= np.random.uniform(
@@ -228,8 +247,10 @@ def add_parameter_noise(
             data[param.name] += np.random.uniform(-noise_level, noise_level, len(data))
 
         # Respect continuous intervals
-        if not param.is_discrete:
-            data[param.name].clip(param.bounds.lower, param.bounds.upper, inplace=True)
+        if param.is_continuous:
+            data[param.name] = data[param.name].clip(
+                param.bounds.lower, param.bounds.upper
+            )
 
 
 def df_drop_single_value_columns(
@@ -256,7 +277,7 @@ def df_drop_single_value_columns(
 
 
 def df_drop_string_columns(
-    df: pd.DataFrame, ignore_list: Optional[List[str]] = None
+    df: pd.DataFrame, ignore_list: list[str] | None = None
 ) -> pd.DataFrame:
     """Drop dataframe columns with string values.
 
@@ -277,7 +298,7 @@ def df_drop_string_columns(
 
 
 def df_uncorrelated_features(
-    df: pd.DataFrame, exclude_list: Optional[List[str]] = None, threshold: float = 0.7
+    df: pd.DataFrame, exclude_list: list[str] | None = None, threshold: float = 0.7
 ):
     """Return an uncorrelated set of features.
 
@@ -320,7 +341,7 @@ def df_uncorrelated_features(
 def fuzzy_row_match(
     left_df: pd.DataFrame,
     right_df: pd.DataFrame,
-    parameters: List[Parameter],
+    parameters: Sequence[Parameter],
     numerical_measurements_must_be_within_tolerance: bool,
 ) -> pd.Index:
     """Match row of the right dataframe to the rows of the left dataframe.
@@ -363,7 +384,7 @@ def fuzzy_row_match(
         # Check if the row represents a valid input
         valid = True
         for param in parameters:
-            if param.is_numeric:
+            if param.is_numerical:
                 if numerical_measurements_must_be_within_tolerance:
                     valid &= param.is_in_range(row[param.name])
             else:
@@ -381,8 +402,8 @@ def fuzzy_row_match(
                 )
 
         # Differentiate category-like and discrete numerical parameters
-        cat_cols = [p.name for p in parameters if not p.is_numeric]
-        num_cols = [p.name for p in parameters if (p.is_numeric and p.is_discrete)]
+        cat_cols = [p.name for p in parameters if not p.is_numerical]
+        num_cols = [p.name for p in parameters if (p.is_numerical and p.is_discrete)]
 
         # Discrete parameters must match exactly
         match = left_df[cat_cols].eq(row[cat_cols]).all(axis=1, skipna=False)
@@ -413,3 +434,30 @@ def fuzzy_row_match(
             inds_matched.extend(inds_found)
 
     return pd.Index(inds_matched)
+
+
+def pretty_print_df(df: pd.DataFrame, max_rows: int = 6, max_columns: int = 4) -> str:
+    """Convert a dataframe into a pretty/readable format.
+
+    This function returns a customized str representation of the dataframe.
+    In case the dataframe is empty, it returns a corresponding statement.
+
+    Args:
+        df: The dataframe to be printed.
+        max_rows: Maximum number of rows to display.
+        max_columns: Maximum number of columns to display.
+
+    Returns:
+        The values to be printed as a str table.
+    """
+    # Get custom str representation via pandas option_context
+    with pd.option_context(
+        "display.max_rows",
+        max_rows,
+        "display.max_columns",
+        max_columns,
+        "expand_frame_repr",
+        False,
+    ):
+        str_df = str(df)
+    return str_df

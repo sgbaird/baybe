@@ -1,22 +1,35 @@
 """BayBE recommenders."""
 
-from baybe.recommenders.bayesian import (
-    NaiveHybridRecommender,
+from baybe.recommenders.meta.sequential import (
+    SequentialMetaRecommender,
+    StreamingSequentialMetaRecommender,
+    TwoPhaseMetaRecommender,
+)
+from baybe.recommenders.naive import NaiveHybridSpaceRecommender
+from baybe.recommenders.pure.bayesian.botorch import BotorchRecommender
+from baybe.recommenders.pure.bayesian.sequential_greedy import (
     SequentialGreedyRecommender,
 )
-from baybe.recommenders.clustering import (
+from baybe.recommenders.pure.nonpredictive.clustering import (
     GaussianMixtureClusteringRecommender,
     KMeansClusteringRecommender,
     PAMClusteringRecommender,
 )
-from baybe.recommenders.sampling import FPSRecommender, RandomRecommender
+from baybe.recommenders.pure.nonpredictive.sampling import (
+    FPSRecommender,
+    RandomRecommender,
+)
 
 __all__ = [
+    "BotorchRecommender",
     "FPSRecommender",
     "GaussianMixtureClusteringRecommender",
     "KMeansClusteringRecommender",
     "PAMClusteringRecommender",
-    "NaiveHybridRecommender",
+    "NaiveHybridSpaceRecommender",
     "RandomRecommender",
+    "TwoPhaseMetaRecommender",
     "SequentialGreedyRecommender",
+    "SequentialMetaRecommender",
+    "StreamingSequentialMetaRecommender",
 ]

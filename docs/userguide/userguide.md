@@ -3,12 +3,13 @@
 ```{toctree}
 Campaigns <campaigns>
 Constraints <constraints>
-Objective <objective>
+Environment Vars <envvars>
+Objectives <objectives>
 Parameters <parameters>
-Recommender <recommender>
+Recommenders <recommenders>
 Search Spaces <searchspace>
+Serialization <serialization>
 Simulation <simulation>
-Strategies <strategies>
 Surrogates <surrogates>
 Targets <targets>
 Transfer Learning <transfer_learning>

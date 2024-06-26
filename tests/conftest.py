@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import os
 from itertools import chain
-from typing import List, Tuple, Union
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
 import pytest
 import torch
+from hypothesis import settings as hypothesis_settings
 
+from baybe._optional.info import CHEM_INSTALLED
+from baybe.acquisition import qExpectedImprovement
 from baybe.campaign import Campaign
 from baybe.constraints import (
     ContinuousLinearEqualityConstraint,
@@ -25,8 +28,9 @@ from baybe.constraints import (
     SubSelectionCondition,
     ThresholdCondition,
 )
-from baybe.exceptions import OptionalImportError
-from baybe.objective import Objective
+from baybe.kernels import MaternKernel
+from baybe.objectives.desirability import DesirabilityObjective
+from baybe.objectives.single import SingleTargetObjective
 from baybe.parameters import (
     CategoricalParameter,
     CustomDiscreteParameter,
@@ -35,17 +39,22 @@ from baybe.parameters import (
     SubstanceEncoding,
     TaskParameter,
 )
-from baybe.recommenders.base import Recommender
-from baybe.recommenders.bayesian import SequentialGreedyRecommender
-from baybe.recommenders.sampling import RandomRecommender
-from baybe.searchspace import SearchSpace
-from baybe.strategies.base import Strategy
-from baybe.strategies.composite import (
-    SequentialStrategy,
-    StreamingSequentialStrategy,
-    TwoPhaseStrategy,
+from baybe.parameters.substance import SubstanceParameter
+from baybe.priors import GammaPrior
+from baybe.recommenders.meta.base import MetaRecommender
+from baybe.recommenders.meta.sequential import (
+    SequentialMetaRecommender,
+    StreamingSequentialMetaRecommender,
+    TwoPhaseMetaRecommender,
 )
-from baybe.surrogates import _ONNX_INSTALLED, GaussianProcessSurrogate
+from baybe.recommenders.pure.base import PureRecommender
+from baybe.recommenders.pure.bayesian.botorch import (
+    BotorchRecommender,
+)
+from baybe.recommenders.pure.nonpredictive.sampling import RandomRecommender
+from baybe.searchspace import SearchSpace
+from baybe.surrogates import GaussianProcessSurrogate
+from baybe.surrogates.custom import CustomONNXSurrogate
 from baybe.targets import NumericalTarget
 from baybe.telemetry import (
     VARNAME_TELEMETRY_ENABLED,
@@ -53,29 +62,15 @@ from baybe.telemetry import (
     VARNAME_TELEMETRY_USERNAME,
 )
 from baybe.utils.basic import hilberts_factory
+from baybe.utils.boolean import strtobool
 from baybe.utils.dataframe import add_fake_results, add_parameter_noise
 
-try:
-    import baybe.utils.chemistry  # noqa: F401  # Tests if chem deps are available
-    from baybe.parameters.substance import SubstanceParameter
+# Hypothesis settings
+hypothesis_settings.register_profile("ci", deadline=500, max_examples=100)
+if strtobool(os.getenv("CI", "false")):
+    hypothesis_settings.load_profile("ci")
 
-    _CHEM_INSTALLED = True
-except OptionalImportError:
-    _CHEM_INSTALLED = False
-
-
-if _ONNX_INSTALLED:
-    from baybe.surrogates.custom import CustomONNXSurrogate
-
-try:
-    # Note: due to our streamlit folder we cannot use plain `import streamlit` here
-    from streamlit import info  # noqa: F401  # Tests if streamlit is available
-
-    _STREAMLIT_INSTALLED = True
-except ImportError:
-    _STREAMLIT_INSTALLED = False
-
-# All fixture functions have prefix 'fixture_' and explicitly declared name so they
+# All fixture functions have prefix 'fixture_' and explicitly declared name, so they
 # can be reused by other fixtures, see
 # https://docs.pytest.org/en/stable/reference/reference.html#pytest-fixture
 
@@ -200,7 +195,7 @@ def fixture_mock_categories():
 
 @pytest.fixture(name="parameters")
 def fixture_parameters(
-    parameter_names: List[str], mock_substances, mock_categories, n_grid_points
+    parameter_names: list[str], mock_substances, mock_categories, n_grid_points
 ):
     """Provides example parameters via specified names."""
     # FIXME: n_grid_points causes duplicate test cases if the argument is not used
@@ -212,22 +207,22 @@ def fixture_parameters(
     valid_parameters = [
         CategoricalParameter(
             name="Categorical_1",
-            values=["A", "B", "C"],
+            values=("A", "B", "C"),
             encoding="OHE",
         ),
         CategoricalParameter(
             name="Categorical_2",
-            values=["bad", "OK", "good"],
-            encoding="OHE",
+            values=("bad", "OK", "good"),
+            encoding="INT",
         ),
         CategoricalParameter(
             name="Switch_1",
-            values=["on", "off"],
+            values=("on", "off"),
             encoding="OHE",
         ),
         CategoricalParameter(
             name="Switch_2",
-            values=["left", "right"],
+            values=("left", "right"),
             encoding="OHE",
         ),
         CategoricalParameter(
@@ -240,36 +235,36 @@ def fixture_parameters(
         ),
         CategoricalParameter(
             name="SomeSetting",
-            values=["slow", "normal", "fast"],
+            values=("slow", "normal", "fast"),
             encoding="INT",
         ),
         NumericalDiscreteParameter(
             name="Num_disc_1",
-            values=[1, 2, 7],
+            values=(1, 2, 7),
             tolerance=0.3,
         ),
         NumericalDiscreteParameter(
             name="Fraction_1",
-            values=list(np.linspace(0, 100, n_grid_points)),
+            values=tuple(np.linspace(0, 100, n_grid_points)),
             tolerance=0.2,
         ),
         NumericalDiscreteParameter(
             name="Fraction_2",
-            values=list(np.linspace(0, 100, n_grid_points)),
+            values=tuple(np.linspace(0, 100, n_grid_points)),
             tolerance=0.5,
         ),
         NumericalDiscreteParameter(
             name="Fraction_3",
-            values=list(np.linspace(0, 100, n_grid_points)),
+            values=tuple(np.linspace(0, 100, n_grid_points)),
             tolerance=0.5,
         ),
         NumericalDiscreteParameter(
             name="Temperature",
-            values=list(np.linspace(100, 200, n_grid_points)),
+            values=tuple(np.linspace(100, 200, n_grid_points)),
         ),
         NumericalDiscreteParameter(
             name="Pressure",
-            values=list(np.linspace(0, 6, n_grid_points)),
+            values=tuple(np.linspace(0, 6, n_grid_points)),
         ),
         NumericalContinuousParameter(
             name="Conti_finite1",
@@ -307,12 +302,12 @@ def fixture_parameters(
         ),
         TaskParameter(
             name="Task",
-            values=["A", "B", "C"],
-            active_values=["A", "B"],
+            values=("A", "B", "C"),
+            active_values=("A", "B"),
         ),
     ]
 
-    if _CHEM_INSTALLED:
+    if CHEM_INSTALLED:
         valid_parameters += [
             *[
                 SubstanceParameter(
@@ -335,7 +330,7 @@ def fixture_parameters(
             *[
                 CategoricalParameter(
                     name=f"Solvent_{k+1}",
-                    values=list(mock_substances.keys()),
+                    values=tuple(mock_substances.keys()),
                 )
                 for k in range(3)
             ],
@@ -345,7 +340,7 @@ def fixture_parameters(
 
 
 @pytest.fixture(name="targets")
-def fixture_targets(target_names: List[str]):
+def fixture_targets(target_names: list[str]):
     """Provides example targets via specified names."""
     # Required for the selection to work as intended (if the input was a single string,
     # the list comprehension would match substrings instead)
@@ -389,7 +384,7 @@ def fixture_targets(target_names: List[str]):
 
 
 @pytest.fixture(name="constraints")
-def fixture_constraints(constraint_names: List[str], mock_substances, n_grid_points):
+def fixture_constraints(constraint_names: list[str], mock_substances, n_grid_points):
     """Provides example constraints via specified names."""
     # Required for the selection to work as intended (if the input was a single string,
     # the list comprehension would match substrings instead)
@@ -546,13 +541,13 @@ def fixture_default_constraint_selection():
 
 
 @pytest.fixture(name="campaign")
-def fixture_campaign(parameters, constraints, strategy, objective):
+def fixture_campaign(parameters, constraints, recommender, objective):
     """Returns a campaign."""
     return Campaign(
         searchspace=SearchSpace.from_product(
             parameters=parameters, constraints=constraints
         ),
-        strategy=strategy,
+        recommender=recommender,
         objective=objective,
     )
 
@@ -563,68 +558,55 @@ def fixture_searchspace(parameters, constraints):
     return SearchSpace.from_product(parameters=parameters, constraints=constraints)
 
 
-@pytest.fixture(name="twophase_strategy")
-def fixture_default_twophase_strategy(recommender, initial_recommender):
-    """The default ```TwoPhaseStrategy``` to be used if not specified differently."""
-    return TwoPhaseStrategy(
+@pytest.fixture(name="twophase_meta_recommender")
+def fixture_default_twophase_meta_recommender(recommender, initial_recommender):
+    """The default ```TwoPhaseMetaRecommender```."""
+    return TwoPhaseMetaRecommender(
         recommender=recommender, initial_recommender=initial_recommender
     )
 
 
-@pytest.fixture(name="sequential_strategy")
-def fixture_default_sequential_strategy():
-    """The default ```SequentialStrategy``` to be used if not specified differently."""
-    return SequentialStrategy(
-        recommenders=[RandomRecommender(), SequentialGreedyRecommender()],
+@pytest.fixture(name="sequential_meta_recommender")
+def fixture_default_sequential_meta_recommender():
+    """The default ```SequentialMetaRecommender```."""
+    return SequentialMetaRecommender(
+        recommenders=[RandomRecommender(), BotorchRecommender()],
         mode="reuse_last",
     )
 
 
-@pytest.fixture(name="streaming_sequential_strategy")
-def fixture_default_streaming_sequential_strategy():
-    """The default ```StreamingSequentialStrategy``` to be used."""
-    return StreamingSequentialStrategy(
-        recommenders=chain(
-            (RandomRecommender(),), hilberts_factory(SequentialGreedyRecommender)
-        )
+@pytest.fixture(name="streaming_sequential_meta_recommender")
+def fixture_default_streaming_sequential_meta_recommender():
+    """The default ```StreamingSequentialMetaRecommender```."""
+    return StreamingSequentialMetaRecommender(
+        recommenders=chain((RandomRecommender(),), hilberts_factory(BotorchRecommender))
     )
 
 
-@pytest.fixture(name="strategy")
-def fixture_select_strategy(
-    request, twophase_strategy, sequential_strategy, streaming_sequential_strategy
-):
-    """Returns the requested strategy."""
-    if not hasattr(request, "param") or (request.param == TwoPhaseStrategy):
-        return twophase_strategy
-    if request.param == SequentialStrategy:
-        return sequential_strategy
-    if request.param == StreamingSequentialStrategy:
-        return streaming_sequential_strategy
-    raise NotImplementedError("unknown strategy type")
-
-
-@pytest.fixture(name="acquisition_function_cls")
+@pytest.fixture(name="acqf")
 def fixture_default_acquisition_function():
     """The default acquisition function to be used if not specified differently."""
-    return "qEI"
+    return qExpectedImprovement()
+
+
+@pytest.fixture(name="lengthscale_prior")
+def fixture_default_lengthscale_prior():
+    """The default lengthscale prior to be used if not specified differently."""
+    return GammaPrior(3, 1)
+
+
+@pytest.fixture(name="kernel")
+def fixture_default_kernel(lengthscale_prior):
+    """The default kernel to be used if not specified differently."""
+    return MaternKernel(nu=5 / 2, lengthscale_prior=lengthscale_prior)
 
 
 @pytest.fixture(name="surrogate_model")
-def fixture_default_surrogate_model(request, onnx_surrogate):
+def fixture_default_surrogate_model(request, kernel):
     """The default surrogate model to be used if not specified differently."""
     if hasattr(request, "param") and request.param == "onnx":
-        return onnx_surrogate
-    return GaussianProcessSurrogate()
-
-
-@pytest.fixture(name="recommender")
-def fixture_recommender(surrogate_model, acquisition_function_cls):
-    """The default recommender to be used if not specified differently."""
-    return SequentialGreedyRecommender(
-        surrogate_model=surrogate_model,
-        acquisition_function_cls=acquisition_function_cls,
-    )
+        return request.getfixturevalue("onnx_surrogate")
+    return GaussianProcessSurrogate(kernel_or_factory=kernel)
 
 
 @pytest.fixture(name="initial_recommender")
@@ -633,11 +615,43 @@ def fixture_initial_recommender():
     return RandomRecommender()
 
 
+@pytest.fixture(name="recommender")
+def fixture_recommender(initial_recommender, surrogate_model, acqf):
+    """The default recommender to be used if not specified differently."""
+    return TwoPhaseMetaRecommender(
+        initial_recommender=initial_recommender,
+        recommender=BotorchRecommender(
+            surrogate_model=surrogate_model,
+            acquisition_function=acqf,
+        ),
+    )
+
+
+@pytest.fixture(name="meta_recommender")
+def fixture_meta_recommender(
+    request,
+    twophase_meta_recommender,
+    sequential_meta_recommender,
+    streaming_sequential_meta_recommender,
+):
+    """Returns the requested recommender."""
+    if not hasattr(request, "param") or (request.param == TwoPhaseMetaRecommender):
+        return twophase_meta_recommender
+    if request.param == SequentialMetaRecommender:
+        return sequential_meta_recommender
+    if request.param == StreamingSequentialMetaRecommender:
+        return streaming_sequential_meta_recommender
+    raise NotImplementedError("unknown recommender type")
+
+
 @pytest.fixture(name="objective")
 def fixture_default_objective(targets):
     """The default objective to be used if not specified differently."""
-    mode = "SINGLE" if len(targets) == 1 else "DESIRABILITY"
-    return Objective(mode=mode, targets=targets)
+    return (
+        SingleTargetObjective(targets[0])
+        if len(targets) == 1
+        else DesirabilityObjective(targets)
+    )
 
 
 @pytest.fixture(name="config")
@@ -647,39 +661,46 @@ def fixture_default_config():
     #   default campaign object instead of hardcoding it here. This avoids redundant
     #   code and automatically keeps them synced.
     cfg = """{
-        "parameters": [
-            {
-                "type": "NumericalDiscreteParameter",
-                "name": "Temp_C",
-                "values": [10, 20, 30, 40]
-            },
-            {
-                "type": "NumericalDiscreteParameter",
-                "name": "Concentration",
-                "values": [0.2, 0.3, 1.4]
-            },
-            __fillin__
-            {
-                "type": "CategoricalParameter",
-                "name": "Base",
-                "values": ["base1", "base2", "base3", "base4", "base5"]
-            }
-        ],
-        "constraints": [],
-        "objective": {
-            "mode": "SINGLE",
-            "targets": [
-                {"name": "Yield", "mode": "MAX"}
-            ]
+        "searchspace": {
+            "constructor": "from_product",
+            "parameters": [
+                {
+                    "type": "NumericalDiscreteParameter",
+                    "name": "Temp_C",
+                    "values": [10, 20, 30, 40]
+                },
+                {
+                    "type": "NumericalDiscreteParameter",
+                    "name": "Concentration",
+                    "values": [0.2, 0.3, 1.4]
+                },
+                __fillin__
+                {
+                    "type": "CategoricalParameter",
+                    "name": "Base",
+                    "values": ["base1", "base2", "base3", "base4", "base5"]
+                }
+            ],
+            "constraints": []
         },
-        "strategy": {
-            "type": "TwoPhaseStrategy",
+        "objective": {
+          "mode": "SINGLE",
+          "targets": [
+            {
+              "type": "NumericalTarget",
+              "name": "Yield",
+              "mode": "MAX"
+            }
+          ]
+        },
+        "recommender": {
+            "type": "TwoPhaseMetaRecommender",
             "initial_recommender": {
                 "type": "RandomRecommender"
             },
             "recommender": {
-                "type": "SequentialGreedyRecommender",
-                "acquisition_function_cls": "qEI",
+                "type": "BotorchRecommender",
+                "acquisition_function": "qEI",
                 "allow_repeated_recommendations": false,
                 "allow_recommending_already_measured": false
             },
@@ -696,7 +717,7 @@ def fixture_default_config():
                 "decorrelate": true,
                 "encoding": "MORDRED"
             },"""
-        if _CHEM_INSTALLED
+        if CHEM_INSTALLED
         else """
                 {
                 "type": "CategoricalParameter",
@@ -708,13 +729,54 @@ def fixture_default_config():
     return cfg
 
 
-@pytest.fixture(name="onnx_str")
-def fixture_default_onnx_str() -> Union[bytes, None]:
-    """The default ONNX model string to be used if not specified differently."""
-    # TODO [19298]: There should be a cleaner way than returning None.
-    if not _ONNX_INSTALLED:
-        return None
+@pytest.fixture(name="simplex_config")
+def fixture_default_simplex_config():
+    """The default simplex config to be used if not specified differently."""
+    cfg = """{
+        "searchspace": {
+          "discrete": {
+              "constructor": "from_simplex",
+              "simplex_parameters": [
+                {
+                  "type": "NumericalDiscreteParameter",
+                  "name": "simplex1",
+                  "values": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+                },
+                {
+                  "type": "NumericalDiscreteParameter",
+                  "name": "simplex2",
+                  "values": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+                }
+              ],
+              "product_parameters": [
+                {
+                  "type": "CategoricalParameter",
+                  "name": "Granularity",
+                  "values": ["coarse", "medium", "fine"]
+                }
+              ],
+              "max_sum": 1.0,
+              "boundary_only": true
+            }
+        },
+        "objective": {
+          "mode": "SINGLE",
+          "targets": [
+            {
+              "type": "NumericalTarget",
+              "name": "Yield",
+              "mode": "MAX"
+            }
+          ]
+        }
+    }"""
 
+    return cfg
+
+
+@pytest.fixture(name="onnx_str")
+def fixture_default_onnx_str() -> bytes:
+    """The default ONNX model string to be used if not specified differently."""
     from skl2onnx import convert_sklearn
     from skl2onnx.common.data_types import FloatTensorType
     from sklearn.linear_model import BayesianRidge
@@ -738,11 +800,8 @@ def fixture_default_onnx_str() -> Union[bytes, None]:
 
 
 @pytest.fixture(name="onnx_surrogate")
-def fixture_default_onnx_surrogate(onnx_str) -> Union["CustomONNXSurrogate", None]:
+def fixture_default_onnx_surrogate(onnx_str) -> CustomONNXSurrogate:
     """The default ONNX model to be used if not specified differently."""
-    # TODO [19298]: There should be a cleaner way than returning None.
-    if not _ONNX_INSTALLED:
-        return None
     return CustomONNXSurrogate(onnx_input_name="input", onnx_str=onnx_str)
 
 
@@ -773,20 +832,13 @@ def run_iterations(
         campaign.add_measurements(rec)
 
 
-def get_dummy_training_data(length: int) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Create column-less input and target dataframes of specified length."""
-    df = pd.DataFrame(np.empty((length, 0)))
-    return df, df
-
-
-def get_dummy_searchspace() -> SearchSpace:
-    """Create a dummy searchspace whose actual content is irrelevant."""
-    parameters = [NumericalDiscreteParameter(name="test", values=[0, 1])]
-    return SearchSpace.from_product(parameters)
-
-
-def select_recommender(strategy: Strategy, training_size: int) -> Recommender:
-    """Select a recommender for given training dataset size."""
-    searchspace = get_dummy_searchspace()
-    df_x, df_y = get_dummy_training_data(training_size)
-    return strategy.select_recommender(searchspace, train_x=df_x, train_y=df_y)
+def select_recommender(
+    meta_recommender: MetaRecommender, training_size: int
+) -> PureRecommender:
+    """Select a recommender for a given training dataset size."""
+    searchspace = Mock(spec=SearchSpace)
+    df = Mock()
+    df.__len__ = Mock(return_value=training_size)
+    return meta_recommender.select_recommender(
+        batch_size=1, searchspace=searchspace, measurements=df
+    )

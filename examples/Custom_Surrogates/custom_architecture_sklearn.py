@@ -8,7 +8,6 @@
 
 ### Necessary imports
 
-from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -22,15 +21,18 @@ from sklearn.linear_model import LinearRegression, Ridge
 from torch import Tensor
 
 from baybe.campaign import Campaign
-from baybe.objective import Objective
+from baybe.objectives import SingleTargetObjective
 from baybe.parameters import (
     CategoricalParameter,
     NumericalDiscreteParameter,
     SubstanceParameter,
 )
-from baybe.recommenders import FPSRecommender, SequentialGreedyRecommender
+from baybe.recommenders import (
+    BotorchRecommender,
+    FPSRecommender,
+    TwoPhaseMetaRecommender,
+)
 from baybe.searchspace import SearchSpace
-from baybe.strategies import TwoPhaseStrategy
 from baybe.surrogates import register_custom_architecture
 from baybe.targets import NumericalTarget
 from baybe.utils.dataframe import add_fake_results
@@ -52,7 +54,7 @@ class MeanVarEstimator(BaseEstimator, RegressorMixin):
         """No fit needed."""
         return
 
-    def predict(self, data: Tensor) -> Tuple[Tensor, Tensor]:
+    def predict(self, data: Tensor) -> tuple[Tensor, Tensor]:
         """Predict based on ensemble unweighted mean and variance."""
         mean = torch.tensor(data.mean(axis=1))
         var = torch.tensor(data.var(axis=1))
@@ -71,9 +73,9 @@ class StackingRegressorSurrogate:
     """Surrogate that extracts posterior from a stack of different regressors."""
 
     def __init__(self):
-        self.model: Optional[StackingRegressor] = None
+        self.model: StackingRegressor | None = None
 
-    def _posterior(self, candidates: Tensor) -> Tuple[Tensor, Tensor]:
+    def _posterior(self, candidates: Tensor) -> tuple[Tensor, Tensor]:
         """See :class:`baybe.surrogates.Surrogate`."""
         return self.model.predict(candidates)
 
@@ -130,13 +132,9 @@ parameters = [
 
 campaign = Campaign(
     searchspace=SearchSpace.from_product(parameters=parameters, constraints=None),
-    objective=Objective(
-        mode="SINGLE", targets=[NumericalTarget(name="Yield", mode="MAX")]
-    ),
-    strategy=TwoPhaseStrategy(
-        recommender=SequentialGreedyRecommender(
-            surrogate_model=StackingRegressorSurrogate()
-        ),
+    objective=SingleTargetObjective(target=NumericalTarget(name="Yield", mode="MAX")),
+    recommender=TwoPhaseMetaRecommender(
+        recommender=BotorchRecommender(surrogate_model=StackingRegressorSurrogate()),
         initial_recommender=FPSRecommender(),
     ),
 )

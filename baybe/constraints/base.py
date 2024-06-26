@@ -1,15 +1,16 @@
 """Base classes for all constraints."""
 
-from abc import ABC, abstractmethod
-from typing import Any, ClassVar, List, Tuple
+from __future__ import annotations
 
+from abc import ABC, abstractmethod
+from collections.abc import Collection, Sequence
+from typing import TYPE_CHECKING, Any, ClassVar
+
+import numpy as np
 import pandas as pd
-import torch
 from attr import define, field
 from attr.validators import min_len
-from torch import Tensor
 
-from baybe.constraints.conditions import Condition
 from baybe.parameters import NumericalContinuousParameter
 from baybe.serialization import (
     SerialMixin,
@@ -17,7 +18,10 @@ from baybe.serialization import (
     get_base_structure_hook,
     unstructure_base,
 )
-from baybe.utils.numerical import DTypeFloatTorch
+from baybe.utils.numerical import DTypeFloatNumpy
+
+if TYPE_CHECKING:
+    from torch import Tensor
 
 
 @define
@@ -37,12 +41,12 @@ class Constraint(ABC, SerialMixin):
     """Class variable encoding whether the condition is evaluated during modeling."""
 
     # Object variables
-    parameters: List[str] = field(validator=min_len(1))
+    parameters: list[str] = field(validator=min_len(1))
     """The list of parameters used for the constraint."""
 
     @parameters.validator
     def _validate_params(  # noqa: DOC101, DOC103
-        self, _: Any, params: List[str]
+        self, _: Any, params: list[str]
     ) -> None:
         """Validate the parameter list.
 
@@ -54,6 +58,13 @@ class Constraint(ABC, SerialMixin):
                 f"The given 'parameters' list must have unique values "
                 f"but was: {params}."
             )
+
+    def summary(self) -> dict:
+        """Return a custom summarization of the constraint."""
+        constr_dict = dict(
+            Type=self.__class__.__name__, Affected_Parameters=self.parameters
+        )
+        return constr_dict
 
     @property
     def is_continuous(self) -> bool:
@@ -96,11 +107,7 @@ class DiscreteConstraint(Constraint, ABC):
 
 @define
 class ContinuousConstraint(Constraint, ABC):
-    """Abstract base class for continuous constraints.
-
-    Continuous constraints use parameter lists and coefficients to define in-/equality
-    constraints over a continuous parameter space.
-    """
+    """Abstract base class for continuous constraints."""
 
     # class variables
     eval_during_creation: ClassVar[bool] = False
@@ -109,8 +116,17 @@ class ContinuousConstraint(Constraint, ABC):
     eval_during_modeling: ClassVar[bool] = True
     # See base class.
 
+
+@define
+class ContinuousLinearConstraint(ContinuousConstraint, ABC):
+    """Abstract base class for continuous linear constraints.
+
+    Continuous linear constraints use parameter lists and coefficients to define
+    in-/equality constraints over a continuous parameter space.
+    """
+
     # object variables
-    coefficients: List[float] = field()
+    coefficients: list[float] = field()
     """In-/equality coefficient for each entry in ``parameters``."""
 
     rhs: float = field(default=0.0)
@@ -118,7 +134,7 @@ class ContinuousConstraint(Constraint, ABC):
 
     @coefficients.validator
     def _validate_coefficients(  # noqa: DOC101, DOC103
-        self, _: Any, coefficients: List[float]
+        self, _: Any, coefficients: list[float]
     ) -> None:
         """Validate the coefficients.
 
@@ -137,9 +153,28 @@ class ContinuousConstraint(Constraint, ABC):
         """Return equal weight coefficients as default."""
         return [1.0] * len(self.parameters)
 
+    def _drop_parameters(
+        self, parameter_names: Collection[str]
+    ) -> ContinuousLinearConstraint:
+        """Create a copy of the constraint with certain parameters removed.
+
+        Args:
+            parameter_names: The names of the parameter to be removed.
+
+        Returns:
+            The reduced constraint.
+        """
+        parameters = [p for p in self.parameters if p not in parameter_names]
+        coefficients = [
+            c
+            for p, c in zip(self.parameters, self.coefficients)
+            if p not in parameter_names
+        ]
+        return ContinuousLinearConstraint(parameters, coefficients, self.rhs)
+
     def to_botorch(
-        self, parameters: List[NumericalContinuousParameter], idx_offset: int = 0
-    ) -> Tuple[Tensor, Tensor, float]:
+        self, parameters: Sequence[NumericalContinuousParameter], idx_offset: int = 0
+    ) -> tuple[Tensor, Tensor, float]:
         """Cast the constraint in a format required by botorch.
 
         Used in calling ``optimize_acqf_*`` functions, for details see
@@ -152,6 +187,10 @@ class ContinuousConstraint(Constraint, ABC):
         Returns:
             The tuple required by botorch.
         """
+        import torch
+
+        from baybe.utils.torch import DTypeFloatTorch
+
         param_names = [p.name for p in parameters]
         param_indices = [
             param_names.index(p) + idx_offset
@@ -162,12 +201,14 @@ class ContinuousConstraint(Constraint, ABC):
         return (
             torch.tensor(param_indices),
             torch.tensor(self.coefficients, dtype=DTypeFloatTorch),
-            self.rhs,
+            np.asarray(self.rhs, dtype=DTypeFloatNumpy).item(),
         )
 
 
+class ContinuousNonlinearConstraint(ContinuousConstraint, ABC):
+    """Abstract base class for nonlinear constraints."""
+
+
 # Register (un-)structure hooks
-converter.register_unstructure_hook(Condition, unstructure_base)
-converter.register_structure_hook(Condition, get_base_structure_hook(Condition))
 converter.register_unstructure_hook(Constraint, unstructure_base)
 converter.register_structure_hook(Constraint, get_base_structure_hook(Constraint))

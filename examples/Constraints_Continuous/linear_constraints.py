@@ -12,6 +12,8 @@
 
 ### Necessary imports for this example
 
+import os
+
 import numpy as np
 from botorch.test_functions import Rastrigin
 
@@ -20,7 +22,7 @@ from baybe.constraints import (
     ContinuousLinearEqualityConstraint,
     ContinuousLinearInequalityConstraint,
 )
-from baybe.objective import Objective
+from baybe.objectives import SingleTargetObjective
 from baybe.parameters import NumericalContinuousParameter
 from baybe.searchspace import SearchSpace
 from baybe.targets import NumericalTarget
@@ -77,9 +79,7 @@ constraints = [
 ]
 
 searchspace = SearchSpace.from_product(parameters=parameters, constraints=constraints)
-objective = Objective(
-    mode="SINGLE", targets=[NumericalTarget(name="Target", mode="MIN")]
-)
+objective = SingleTargetObjective(target=NumericalTarget(name="Target", mode="MIN"))
 
 ### Construct the campaign and run some iterations
 
@@ -88,8 +88,12 @@ campaign = Campaign(
     objective=objective,
 )
 
-BATCH_SIZE = 3
-N_ITERATIONS = 3
+# Improve running time for CI via SMOKE_TEST
+
+SMOKE_TEST = "SMOKE_TEST" in os.environ
+
+BATCH_SIZE = 2 if SMOKE_TEST else 3
+N_ITERATIONS = 2 if SMOKE_TEST else 3
 
 for k in range(N_ITERATIONS):
     recommendation = campaign.recommend(batch_size=BATCH_SIZE)

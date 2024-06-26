@@ -15,7 +15,7 @@ from baybe.parameters import (
 from baybe.parameters.categorical import TaskParameter
 from baybe.searchspace import SearchSpace, SubspaceContinuous
 from baybe.searchspace.discrete import SubspaceDiscrete
-from tests.hypothesis_strategies.parameters import numerical_discrete_parameter
+from tests.hypothesis_strategies.parameters import numerical_discrete_parameters
 
 # Discrete inputs for testing
 s_x = pd.Series([1, 2, 3], name="x")
@@ -42,19 +42,19 @@ df = pd.concat([df_discrete, df_continuous], axis=1)
 @pytest.mark.parametrize(
     ("df", "parameters", "expected"),
     [
-        param(s_x.to_frame(), [p_x], [p_x], id="num-match"),
-        param(s_x.to_frame(), [p_x_over], [p_x_over], id="num_overparametrized"),
-        param(s_x.to_frame(), [p_x_under], ValueError, id="num_underparametrized"),
-        param(df_discrete, [p_x, p_x], ValueError, id="duplicate-name"),
-        param(s_x.to_frame(), [p_x, p_y], ValueError, id="no_match"),
-        param(s_y.to_frame(), [p_y], [p_y], id="cat-match"),
-        param(df_discrete, [p_x, p_y], [p_x, p_y], id="both-match"),
-        param(df_discrete, [p_x], [p_x, p_y], id="one-unspecified"),
+        param(s_x.to_frame(), (p_x,), (p_x,), id="num-match"),
+        param(s_x.to_frame(), (p_x_over,), (p_x_over,), id="num_overparametrized"),
+        param(s_x.to_frame(), (p_x_under,), ValueError, id="num_underparametrized"),
+        param(df_discrete, (p_x, p_x), ValueError, id="duplicate-name"),
+        param(s_x.to_frame(), (p_x, p_y), ValueError, id="no_match"),
+        param(s_y.to_frame(), (p_y,), (p_y,), id="cat-match"),
+        param(df_discrete, (p_x, p_y), (p_x, p_y), id="both-match"),
+        param(df_discrete, (p_x,), (p_x, p_y), id="one-unspecified"),
     ],
 )
 def test_discrete_space_creation_from_dataframe(df, parameters, expected):
     """Parameters are automatically inferred and exceptions are triggered."""
-    if isinstance(expected, list):
+    if isinstance(expected, tuple):
         subspace = SubspaceDiscrete.from_dataframe(df, parameters)
         actual = subspace.parameters
         assert actual == expected, (actual, expected)
@@ -66,17 +66,17 @@ def test_discrete_space_creation_from_dataframe(df, parameters, expected):
 @pytest.mark.parametrize(
     ("df", "parameters", "expected"),
     [
-        param(s_a.to_frame(), [p_a], [p_a], id="match"),
-        param(s_a.to_frame(), [p_a_over], [p_a_over], id="overparametrized"),
-        param(s_a.to_frame(), [p_a_under], ValueError, id="underparametrized"),
-        param(df_continuous, [p_a, p_a], ValueError, id="duplicate-name"),
-        param(s_a.to_frame(), [p_a, p_b], ValueError, id="no_match"),
-        param(df_continuous, [p_a], [p_a, p_b], id="one-unspecified"),
+        param(s_a.to_frame(), (p_a,), (p_a,), id="match"),
+        param(s_a.to_frame(), (p_a_over,), (p_a_over,), id="overparametrized"),
+        param(s_a.to_frame(), (p_a_under,), ValueError, id="underparametrized"),
+        param(df_continuous, (p_a, p_a), ValueError, id="duplicate-name"),
+        param(s_a.to_frame(), (p_a, p_b), ValueError, id="no_match"),
+        param(df_continuous, (p_a,), (p_a, p_b), id="one-unspecified"),
     ],
 )
 def test_continuous_space_creation_from_dataframe(df, parameters, expected):
     """Parameters are automatically inferred and exceptions are triggered."""
-    if isinstance(expected, list):
+    if isinstance(expected, tuple):
         subspace = SubspaceContinuous.from_dataframe(df, parameters)
         actual = subspace.parameters
         assert actual == expected, (actual, expected)
@@ -88,14 +88,14 @@ def test_continuous_space_creation_from_dataframe(df, parameters, expected):
 @pytest.mark.parametrize(
     ("df", "parameters", "expected"),
     [
-        param(df, [p_x, p_y, p_a, p_b], [p_x, p_y, p_a, p_b], id="match"),
-        param(df, [p_x, p_x, p_x, p_x], ValueError, id="duplicates"),
-        param(df, [p_x], ValueError, id="missing"),
+        param(df, (p_x, p_y, p_a, p_b), (p_x, p_y, p_a, p_b), id="match"),
+        param(df, (p_x, p_x, p_x, p_x), ValueError, id="duplicates"),
+        param(df, (p_x,), ValueError, id="missing"),
     ],
 )
 def test_searchspace_creation_from_dataframe(df, parameters, expected):
     """Parameters are automatically inferred and exceptions are triggered."""
-    if isinstance(expected, list):
+    if isinstance(expected, tuple):
         subspace = SearchSpace.from_dataframe(df, parameters)
         actual = subspace.parameters
         assert actual == expected, (actual, expected)
@@ -107,7 +107,7 @@ def test_searchspace_creation_from_dataframe(df, parameters, expected):
 @pytest.mark.parametrize("boundary_only", (False, True))
 @given(
     parameters=st.lists(
-        numerical_discrete_parameter(min_value=0.0, max_value=1.0),
+        numerical_discrete_parameters(min_value=0.0, max_value=1.0),
         min_size=1,
         max_size=5,
         unique_by=lambda x: x.name,
@@ -158,7 +158,34 @@ def test_discrete_space_creation_from_simplex_mixed(
     """Additional non-simplex parameters enter in form of a Cartesian product."""
     max_sum = 1.0
     subspace = SubspaceDiscrete.from_simplex(
-        max_sum, simplex_parameters, product_parameters, boundary_only=False
+        max_sum,
+        simplex_parameters,
+        product_parameters=product_parameters,
+        boundary_only=False,
     )
     assert len(subspace.exp_rep) == n_elements  # <-- (# simplex part) x (# task part)
     assert not any(subspace.exp_rep.duplicated())
+    assert len(subspace.parameters) == len(subspace.exp_rep.columns)
+    assert all(p.name in subspace.exp_rep.columns for p in subspace.parameters)
+
+
+@pytest.mark.parametrize("boundary_only", (False, True))
+def test_discrete_space_creation_from_simplex_restricted(boundary_only):
+    """The number of nonzero simplex parameters is controllable."""
+    params = [
+        NumericalDiscreteParameter(f"p{i}", np.linspace(0, 1, 11)) for i in range(10)
+    ]
+    subspace = SubspaceDiscrete.from_simplex(
+        max_sum=1.0,
+        simplex_parameters=params,
+        min_nonzero=2,
+        max_nonzero=4,
+        boundary_only=True,
+    )
+    n_nonzero = (subspace.exp_rep > 0.0).sum(axis=1)
+    if boundary_only:
+        assert np.allclose(subspace.exp_rep.sum(axis=1), 1.0)
+    assert n_nonzero.min() == 2
+    assert n_nonzero.max() == 4
+    assert len(subspace.parameters) == len(subspace.exp_rep.columns)
+    assert all(p.name in subspace.exp_rep.columns for p in subspace.parameters)

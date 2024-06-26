@@ -6,23 +6,25 @@ in our documentation tool, see https://github.com/sphinx-doc/sphinx/issues/11750
 Since we plan to refactor the surrogates, this part of the documentation will be
 available in the future. Thus, please have a look in the source code directly.
 """
+from __future__ import annotations
 
-from typing import Any, ClassVar, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, ClassVar
 
-import torch
 from attr import define, field
 from ngboost import NGBRegressor
-from torch import Tensor
 
 from baybe.searchspace import SearchSpace
 from baybe.surrogates.base import Surrogate
-from baybe.surrogates.utils import batchify, catch_constant_targets, scale_model
+from baybe.surrogates.utils import autoscale, batchify, catch_constant_targets
 from baybe.surrogates.validation import get_model_params_validator
+
+if TYPE_CHECKING:
+    from torch import Tensor
 
 
 @catch_constant_targets
-@scale_model
-@define
+@autoscale
+@define(slots=False)
 class NGBoostSurrogate(Surrogate):
     """A natural-gradient-boosting surrogate model."""
 
@@ -37,22 +39,25 @@ class NGBoostSurrogate(Surrogate):
     """Class variable encoding the default model parameters."""
 
     # Object variables
-    model_params: Dict[str, Any] = field(
+    model_params: dict[str, Any] = field(
         factory=dict,
         converter=dict,
         validator=get_model_params_validator(NGBRegressor.__init__),
     )
-    # See base class.
+    """Optional model parameter that will be passed to the surrogate constructor."""
 
-    _model: Optional[NGBRegressor] = field(init=False, default=None)
+    _model: NGBRegressor | None = field(init=False, default=None, eq=False)
     """The actual model."""
 
     def __attrs_post_init__(self):
         self.model_params = {**self._default_model_params, **self.model_params}
 
     @batchify
-    def _posterior(self, candidates: Tensor) -> Tuple[Tensor, Tensor]:
+    def _posterior(self, candidates: Tensor) -> tuple[Tensor, Tensor]:
         # See base class.
+
+        import torch
+
         # Get predictions
         dists = self._model.pred_dist(candidates)
 

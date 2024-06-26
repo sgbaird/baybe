@@ -11,12 +11,12 @@
 
 ### Necessary imports for this example
 
-from typing import Tuple
+import os
 
 import numpy as np
 
 from baybe import Campaign
-from baybe.objective import Objective
+from baybe.objectives import DesirabilityObjective
 from baybe.parameters import NumericalDiscreteParameter
 from baybe.searchspace import SearchSpace
 from baybe.simulation import simulate_scenarios
@@ -27,25 +27,28 @@ from baybe.targets import NumericalTarget
 # For the full simulation, we need to define some additional parameters.
 # These are the number of Monte Carlo runs and the number of experiments to be conducted per run.
 
-N_MC_ITERATIONS = 2
-N_DOE_ITERATIONS = 4
+SMOKE_TEST = "SMOKE_TEST" in os.environ
+
+N_MC_ITERATIONS = 2 if SMOKE_TEST else 5
+N_DOE_ITERATIONS = 2 if SMOKE_TEST else 4
+BATCH_SIZE = 1 if SMOKE_TEST else 2
+DIMENSION = 4
+BOUNDS = [(-2, 2), (-2, 2), (-2, 2), (-2, 2)]
+POINTS_PER_DIM = 3 if SMOKE_TEST else 10
+
 
 ### Defining the test function
-
 
 # See [`custom_analytical`](./custom_analytical.md) for details.
 
 
-def sum_of_squares(*x: float) -> Tuple[float, float]:
+def sum_of_squares(*x: float) -> tuple[float, float]:
     """Calculate the sum of squares."""
     res = 0
     for y in x:
         res += y**2
     return res, 2 * res**2 - 1
 
-
-DIMENSION = 4
-BOUNDS = [(-2, 2), (-2, 2), (-2, 2), (-2, 2)]
 
 ### Creating the searchspace
 
@@ -54,7 +57,7 @@ BOUNDS = [(-2, 2), (-2, 2), (-2, 2), (-2, 2)]
 parameters = [
     NumericalDiscreteParameter(
         name=f"x_{k+1}",
-        values=list(np.linspace(*BOUNDS[k], 10)),
+        values=list(np.linspace(*BOUNDS[k], POINTS_PER_DIM)),
         tolerance=0.01,
     )
     for k in range(DIMENSION)
@@ -84,11 +87,10 @@ Target_2 = NumericalTarget(
 
 targets = [Target_1, Target_2]
 
-objective = Objective(
-    mode="DESIRABILITY",
+objective = DesirabilityObjective(
     targets=targets,
     weights=[20, 30],
-    combine_func="MEAN",
+    scalarizer="MEAN",
 )
 
 
@@ -103,7 +105,7 @@ scenarios = {"BayBE": campaign}
 results = simulate_scenarios(
     scenarios,
     sum_of_squares,
-    batch_size=2,
+    batch_size=BATCH_SIZE,
     n_doe_iterations=N_DOE_ITERATIONS,
     n_mc_iterations=N_MC_ITERATIONS,
 )

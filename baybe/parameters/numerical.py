@@ -1,7 +1,7 @@
 """Numerical parameters."""
 
 from functools import cached_property
-from typing import Any, ClassVar, Tuple
+from typing import Any, ClassVar
 
 import cattrs
 import numpy as np
@@ -10,7 +10,7 @@ from attrs import define, field
 from attrs.validators import min_len
 
 from baybe.exceptions import NumericalUnderflowError
-from baybe.parameters.base import DiscreteParameter, Parameter
+from baybe.parameters.base import ContinuousParameter, DiscreteParameter
 from baybe.parameters.validation import validate_is_finite, validate_unique_values
 from baybe.utils.interval import InfiniteIntervalError, Interval, convert_bounds
 from baybe.utils.numerical import DTypeFloatNumpy
@@ -21,14 +21,14 @@ class NumericalDiscreteParameter(DiscreteParameter):
     """Parameter class for discrete numerical parameters (a.k.a. setpoints)."""
 
     # class variables
-    is_numeric: ClassVar[bool] = True
+    is_numerical: ClassVar[bool] = True
     # See base class.
 
     # object variables
     # NOTE: The parameter values are assumed to be sorted by the tolerance validator.
-    _values: Tuple[float, ...] = field(
+    _values: tuple[float, ...] = field(
         # FIXME[typing]: https://github.com/python-attrs/cattrs/issues/111
-        converter=lambda x: sorted(cattrs.structure(x, Tuple[float, ...])),  # type: ignore
+        converter=lambda x: sorted(cattrs.structure(x, tuple[float, ...])),  # type: ignore
         # FIXME[typing]: https://github.com/python-attrs/attrs/issues/1197
         validator=[
             min_len(2),
@@ -62,8 +62,8 @@ class NumericalDiscreteParameter(DiscreteParameter):
         if tolerance == 0.0:
             return
 
-        min_dist = np.diff(self.values).min()
-        if min_dist == (eps := np.nextafter(0, 1, dtype=DTypeFloatNumpy)):
+        min_dist = np.diff(self._values).min()
+        if min_dist == (eps := np.nextafter(0, 1)):
             raise NumericalUnderflowError(
                 f"The distance between any two parameter values must be at least "
                 f"twice the size of the used floating point resolution of {eps}."
@@ -79,12 +79,14 @@ class NumericalDiscreteParameter(DiscreteParameter):
     @property
     def values(self) -> tuple:  # noqa: D102
         # See base class.
-        return self._values
+        return tuple(DTypeFloatNumpy(itm) for itm in self._values)
 
     @cached_property
     def comp_df(self) -> pd.DataFrame:  # noqa: D102
         # See base class.
-        comp_df = pd.DataFrame({self.name: self.values}, index=self.values)
+        comp_df = pd.DataFrame(
+            {self.name: self.values}, index=self.values, dtype=DTypeFloatNumpy
+        )
         return comp_df
 
     def is_in_range(self, item: float) -> bool:  # noqa: D102
@@ -96,14 +98,11 @@ class NumericalDiscreteParameter(DiscreteParameter):
 
 
 @define(frozen=True, slots=False)
-class NumericalContinuousParameter(Parameter):
+class NumericalContinuousParameter(ContinuousParameter):
     """Parameter class for continuous numerical parameters."""
 
     # class variables
-    is_numeric: ClassVar[bool] = True
-    # See base class.
-
-    is_discrete: ClassVar[bool] = False
+    is_numerical: ClassVar[bool] = True
     # See base class.
 
     # object variables
@@ -123,8 +122,22 @@ class NumericalContinuousParameter(Parameter):
                 f"of {value.to_tuple()}. Infinite intervals for parameters are "
                 f"currently not supported."
             )
+        if value.is_degenerate:
+            raise ValueError(
+                "The interval specified by the parameter bounds cannot be degenerate."
+            )
 
     def is_in_range(self, item: float) -> bool:  # noqa: D102
         # See base class.
 
         return self.bounds.contains(item)
+
+    def summary(self) -> dict:  # noqa: D102
+        # See base class.
+        param_dict = dict(
+            Name=self.name,
+            Type=self.__class__.__name__,
+            Lower_Bound=self.bounds.lower,
+            Upper_Bound=self.bounds.upper,
+        )
+        return param_dict

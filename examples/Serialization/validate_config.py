@@ -67,17 +67,17 @@ CONFIG = str(
             }
         ]
     },
-    "strategy": {
-        "type": "TwoPhaseStrategy",
+    "recommender": {
+        "type": "TwoPhaseMetaRecommender",
         "initial_recommender": {
             "type": "FPSRecommender"
         },
         "recommender": {
-            "type": "SequentialGreedyRecommender",
+            "type": "BotorchRecommender",
             "surrogate_model": {
                 "type": "GaussianProcessSurrogate"
             },
-            "acquisition_function_cls": "qEI",
+            "acquisition_function": "qEI",
             "allow_repeated_recommendations": false,
             "allow_recommending_already_measured": false
         },
@@ -138,17 +138,17 @@ INVALID_CONFIG = str(
             }
         ]
     },
-    "strategy": {
-        "type": "TwoPhaseStrategy",
+    "recommender": {
+        "type": "TwoPhaseMetaRecommender",
         "initial_recommender": {
             "type": "FPSRecommender"
         },
         "recommender": {
-            "type": "SequentialGreedyRecommender",
+            "type": "BotorchRecommender",
             "surrogate_model": {
                 "type": "GaussianProcessSurrogate"
             },
-            "acquisition_function_cls": "qEI",
+            "acquisition_function": "qEI",
             "allow_repeated_recommendations": false,
             "allow_recommending_already_measured": false
         }
