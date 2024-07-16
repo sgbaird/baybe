@@ -1,0 +1,17 @@
+name: baybe
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python>=3.6
+  - pip
+  - ipython
+  - ipykernel
+  - pip:
+     - -e .[dev]  # install git checkout of ac-microcourses in editable mode
+     # add here only pip-packages that are not available in conda/conda-forge! E.g.:
+
+  # DEVELOPMENT ONLY PACKAGES (could also be kept in a separate environment file)
+  - pytest
+  - pytest-cov
+  - hypothesis[pandas]
