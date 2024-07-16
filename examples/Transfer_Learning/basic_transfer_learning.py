@@ -38,7 +38,6 @@ N_MC_ITERATIONS = 2 if SMOKE_TEST else 50  # number of Monte Carlo runs
 N_DOE_ITERATIONS = 2 if SMOKE_TEST else 10  # number of DOE iterations
 POINTS_PER_DIM = 3 if SMOKE_TEST else 5  # number of grid points per input dimension
 
-
 ### Creating the Optimization Objective
 
 # The test functions each have a single output that is to be minimized.
@@ -161,7 +160,13 @@ results = pd.concat([result_baseline, *results])
 # using even small amounts of training data from related optimization tasks.
 
 results.rename(columns={"Scenario": "% of data used"}, inplace=True)
-path = Path(sys.path[0])
+
+# Check operating system and set path accordingly
+if os.name == "nt":  # Windows
+    path = "."
+else:  # Linux and others
+    path = Path(sys.path[0])
+
 ax = sns.lineplot(
     data=results,
     marker="o",
