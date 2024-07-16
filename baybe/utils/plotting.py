@@ -16,6 +16,7 @@ def create_example_plots(
     ax: Axes,
     path: Path,
     base_name: str,
+    smoke_test_skip: bool = True,
 ) -> None:
     """Create plots from an Axes object and save them as a svg file.
 
