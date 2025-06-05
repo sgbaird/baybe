@@ -79,34 +79,27 @@ def demo_baybe_implementation():
             for i in range(DIMENSION)
         ]
         
-        # Define linear constraints
-        # Example constraints for demonstration:
-        # 1. x1 + x2 <= 1.5 (converted to -x1 - x2 >= -1.5)
-        # 2. x3 + x4 + x5 >= 0.5
-        # 3. x1 + 2*x6 = 1.0 (equality constraint)
+        # Define linear EQUALITY constraints
+        # Focus specifically on equality constraints as requested:
+        # 1. x1 + 2*x6 = 1.0 (constraint on x1 and x6)
+        # 2. x2 + x3 = 0.5 (constraint on x2 and x3)
         
         constraints = [
-            ContinuousLinearInequalityConstraint(
-                parameters=["x1", "x2"], 
-                coefficients=[-1.0, -1.0], 
-                rhs=-1.5,
-                comment="x1 + x2 <= 1.5"
-            ),
-            ContinuousLinearInequalityConstraint(
-                parameters=["x3", "x4", "x5"], 
-                coefficients=[1.0, 1.0, 1.0], 
-                rhs=0.5,
-                comment="x3 + x4 + x5 >= 0.5"
-            ),
             ContinuousLinearEqualityConstraint(
                 parameters=["x1", "x6"], 
                 coefficients=[1.0, 2.0], 
                 rhs=1.0,
                 comment="x1 + 2*x6 = 1.0"
             ),
+            ContinuousLinearEqualityConstraint(
+                parameters=["x2", "x3"], 
+                coefficients=[1.0, 1.0], 
+                rhs=0.5,
+                comment="x2 + x3 = 0.5"
+            ),
         ]
         
-        print(f"✓ Defined {len(constraints)} linear constraints:")
+        print(f"✓ Defined {len(constraints)} linear EQUALITY constraints:")
         for i, c in enumerate(constraints):
             print(f"  {i+1}. {getattr(c, 'comment', 'No description')}")
         
@@ -159,25 +152,20 @@ def demo_baybe_implementation():
         
         print(f"✓ BayBE final best value: {min(baybe_results):.6f}")
         
-        # Verify constraints are satisfied
+        # Verify EQUALITY constraints are satisfied
         measurements = campaign.measurements
-        print("\n--- Constraint Verification ---")
+        print("\n--- Equality Constraint Verification ---")
         tolerance = 1e-3
         
-        # Check constraint 1: x1 + x2 <= 1.5
-        constraint1_values = measurements["x1"] + measurements["x2"]
-        constraint1_satisfied = (constraint1_values <= 1.5 + tolerance).all()
-        print(f"  x1 + x2 <= 1.5: {constraint1_satisfied} (max = {constraint1_values.max():.6f})")
+        # Check constraint 1: x1 + 2*x6 = 1.0
+        constraint1_values = measurements["x1"] + 2 * measurements["x6"]
+        constraint1_satisfied = np.allclose(constraint1_values, 1.0, atol=tolerance)
+        print(f"  x1 + 2*x6 = 1.0: {constraint1_satisfied} (mean = {constraint1_values.mean():.6f}, std = {constraint1_values.std():.6f})")
         
-        # Check constraint 2: x3 + x4 + x5 >= 0.5
-        constraint2_values = measurements["x3"] + measurements["x4"] + measurements["x5"]
-        constraint2_satisfied = (constraint2_values >= 0.5 - tolerance).all()
-        print(f"  x3 + x4 + x5 >= 0.5: {constraint2_satisfied} (min = {constraint2_values.min():.6f})")
-        
-        # Check constraint 3: x1 + 2*x6 = 1.0
-        constraint3_values = measurements["x1"] + 2 * measurements["x6"]
-        constraint3_satisfied = np.allclose(constraint3_values, 1.0, atol=tolerance)
-        print(f"  x1 + 2*x6 = 1.0: {constraint3_satisfied} (mean = {constraint3_values.mean():.6f})")
+        # Check constraint 2: x2 + x3 = 0.5
+        constraint2_values = measurements["x2"] + measurements["x3"]
+        constraint2_satisfied = np.allclose(constraint2_values, 0.5, atol=tolerance)
+        print(f"  x2 + x3 = 0.5: {constraint2_satisfied} (mean = {constraint2_values.mean():.6f}, std = {constraint2_values.std():.6f})")
         
         return baybe_results, measurements
         
@@ -218,39 +206,29 @@ def demo_botorch_implementation():
         
         print(f"✓ Hartmann{DIMENSION} function initialized")
         
-        # Define the same constraints in BoTorch format
+        # Define the same EQUALITY constraints in BoTorch format
         # Converting from BayBE format to BoTorch format manually
         
-        # Constraint 1: x1 + x2 <= 1.5 → -x1 - x2 >= -1.5
-        ineq_constraint_1 = (
-            torch.tensor([0, 1]),  # indices for x1, x2 (0-indexed)
-            torch.tensor([-1.0, -1.0]),  # coefficients
-            -1.5  # rhs
-        )
-        
-        # Constraint 2: x3 + x4 + x5 >= 0.5  
-        ineq_constraint_2 = (
-            torch.tensor([2, 3, 4]),  # indices for x3, x4, x5 (0-indexed)
-            torch.tensor([1.0, 1.0, 1.0]),  # coefficients
-            0.5  # rhs
-        )
-        
-        # Constraint 3: x1 + 2*x6 = 1.0
+        # Constraint 1: x1 + 2*x6 = 1.0
         eq_constraint_1 = (
             torch.tensor([0, 5]),  # indices for x1, x6 (0-indexed)
             torch.tensor([1.0, 2.0]),  # coefficients
             1.0  # rhs
         )
         
-        inequality_constraints = [ineq_constraint_1, ineq_constraint_2]
-        equality_constraints = [eq_constraint_1]
+        # Constraint 2: x2 + x3 = 0.5  
+        eq_constraint_2 = (
+            torch.tensor([1, 2]),  # indices for x2, x3 (0-indexed)
+            torch.tensor([1.0, 1.0]),  # coefficients
+            0.5  # rhs
+        )
         
-        print(f"✓ Defined constraints in BoTorch format:")
-        print(f"  Inequality constraints: {len(inequality_constraints)}")
+        inequality_constraints = []  # No inequality constraints - focusing on equality only
+        equality_constraints = [eq_constraint_1, eq_constraint_2]
+        
+        print(f"✓ Defined EQUALITY constraints in BoTorch format:")
+        print(f"  Inequality constraints: {len(inequality_constraints)} (none - focusing on equality)")
         print(f"  Equality constraints: {len(equality_constraints)}")
-        
-        for i, (indices, coeffs, rhs) in enumerate(inequality_constraints):
-            print(f"    Ineq {i+1}: indices={indices.tolist()}, coeffs={coeffs.tolist()}, rhs={rhs}")
         
         for i, (indices, coeffs, rhs) in enumerate(equality_constraints):
             print(f"    Eq {i+1}: indices={indices.tolist()}, coeffs={coeffs.tolist()}, rhs={rhs}")
@@ -304,24 +282,19 @@ def demo_botorch_implementation():
         
         print(f"✓ BoTorch final best value: {min(botorch_results):.6f}")
         
-        # Verify constraints are satisfied for all points
-        print("\n--- Constraint Verification ---")
+        # Verify EQUALITY constraints are satisfied for all points
+        print("\n--- Equality Constraint Verification ---")
         tolerance = 1e-3
         
-        # Check constraint 1: x1 + x2 <= 1.5
-        constraint1_values = train_X[:, 0] + train_X[:, 1]
-        constraint1_satisfied = (constraint1_values <= 1.5 + tolerance).all()
-        print(f"  x1 + x2 <= 1.5: {constraint1_satisfied} (max = {constraint1_values.max():.6f})")
+        # Check constraint 1: x1 + 2*x6 = 1.0
+        constraint1_values = train_X[:, 0] + 2 * train_X[:, 5]
+        constraint1_satisfied = torch.allclose(constraint1_values, torch.tensor(1.0), atol=tolerance)
+        print(f"  x1 + 2*x6 = 1.0: {constraint1_satisfied} (mean = {constraint1_values.mean():.6f}, std = {constraint1_values.std():.6f})")
         
-        # Check constraint 2: x3 + x4 + x5 >= 0.5
-        constraint2_values = train_X[:, 2] + train_X[:, 3] + train_X[:, 4]
-        constraint2_satisfied = (constraint2_values >= 0.5 - tolerance).all()
-        print(f"  x3 + x4 + x5 >= 0.5: {constraint2_satisfied} (min = {constraint2_values.min():.6f})")
-        
-        # Check constraint 3: x1 + 2*x6 = 1.0
-        constraint3_values = train_X[:, 0] + 2 * train_X[:, 5]
-        constraint3_satisfied = torch.allclose(constraint3_values, torch.tensor(1.0), atol=tolerance)
-        print(f"  x1 + 2*x6 = 1.0: {constraint3_satisfied} (mean = {constraint3_values.mean():.6f})")
+        # Check constraint 2: x2 + x3 = 0.5
+        constraint2_values = train_X[:, 1] + train_X[:, 2]
+        constraint2_satisfied = torch.allclose(constraint2_values, torch.tensor(0.5), atol=tolerance)
+        print(f"  x2 + x3 = 0.5: {constraint2_satisfied} (mean = {constraint2_values.mean():.6f}, std = {constraint2_values.std():.6f})")
         
         return botorch_results, train_X
         
@@ -338,50 +311,16 @@ def generate_feasible_initial_points(
     max_attempts: int = 1000
 ) -> torch.Tensor:
     """
-    Generate initial points that satisfy all linear constraints.
+    Generate initial points that satisfy all linear EQUALITY constraints.
     
-    This is a simplified implementation - in practice, you'd want a more
-    sophisticated constraint satisfaction method.
+    Since we're focusing on equality constraints, we use a projection method
+    to ensure generated points lie on the constraint manifold.
     """
-    print(f"  Generating {n_points} feasible initial points...")
+    print(f"  Generating {n_points} feasible initial points for EQUALITY constraints...")
     
-    feasible_points = []
-    attempts = 0
-    
-    while len(feasible_points) < n_points and attempts < max_attempts:
-        # Generate random point within bounds
-        point = bounds[0] + (bounds[1] - bounds[0]) * torch.rand(bounds.shape[1])
-        
-        # Check if point satisfies all constraints
-        feasible = True
-        
-        # Check equality constraints
-        for indices, coeffs, rhs in equality_constraints:
-            constraint_value = torch.sum(coeffs * point[indices])
-            if abs(constraint_value - rhs) > 1e-6:
-                feasible = False
-                break
-        
-        if feasible:
-            # Check inequality constraints  
-            for indices, coeffs, rhs in inequality_constraints:
-                constraint_value = torch.sum(coeffs * point[indices])
-                if constraint_value < rhs - 1e-6:
-                    feasible = False
-                    break
-        
-        if feasible:
-            feasible_points.append(point)
-        
-        attempts += 1
-    
-    if len(feasible_points) == 0:
-        print(f"  Warning: Could not generate feasible points after {attempts} attempts")
-        print(f"  Using relaxed constraint satisfaction...")
-        # Fallback: generate points and project them to satisfy equality constraints
-        return project_to_equality_constraints(bounds, equality_constraints, n_points)
-    
-    return torch.stack(feasible_points)
+    # For equality constraints, we use projection rather than rejection sampling
+    # since equality constraints define a lower-dimensional manifold
+    return project_to_equality_constraints(bounds, equality_constraints, n_points)
 
 def project_to_equality_constraints(
     bounds: torch.Tensor,
@@ -391,28 +330,44 @@ def project_to_equality_constraints(
     """
     Project random points to satisfy equality constraints.
     
-    For the constraint x1 + 2*x6 = 1.0, we can solve for x6 given x1.
+    For multiple equality constraints, we solve them systematically:
+    1. x1 + 2*x6 = 1.0 → solve for x6 given x1
+    2. x2 + x3 = 0.5 → solve for x3 given x2
     """
     points = []
     
     for _ in range(n_points):
         point = bounds[0] + (bounds[1] - bounds[0]) * torch.rand(bounds.shape[1])
         
-        # For constraint x1 + 2*x6 = 1.0, solve for x6
-        if equality_constraints:
-            indices, coeffs, rhs = equality_constraints[0]  # x1 + 2*x6 = 1.0
+        # Apply each equality constraint
+        for constraint_idx, (indices, coeffs, rhs) in enumerate(equality_constraints):
             if len(indices) == 2:  # Simple case with 2 variables
-                # x6 = (rhs - coeffs[0]*x1) / coeffs[1]
-                x1_val = point[indices[0]]
-                x6_val = (rhs - coeffs[0] * x1_val) / coeffs[1]
-                # Clamp to bounds
-                x6_val = torch.clamp(x6_val, bounds[0, indices[1]], bounds[1, indices[1]])
-                point[indices[1]] = x6_val
+                # For constraint: coeffs[0]*x[indices[0]] + coeffs[1]*x[indices[1]] = rhs
+                # Solve for x[indices[1]]: x[indices[1]] = (rhs - coeffs[0]*x[indices[0]]) / coeffs[1]
                 
-                # Adjust x1 if x6 had to be clamped
-                x1_val = (rhs - coeffs[1] * x6_val) / coeffs[0]
-                x1_val = torch.clamp(x1_val, bounds[0, indices[0]], bounds[1, indices[0]])
-                point[indices[0]] = x1_val
+                var1_idx, var2_idx = indices[0], indices[1]
+                coeff1, coeff2 = coeffs[0], coeffs[1]
+                
+                # Calculate constrained variable value
+                constrained_val = (rhs - coeff1 * point[var1_idx]) / coeff2
+                
+                # Clamp to bounds
+                constrained_val = torch.clamp(
+                    constrained_val, 
+                    bounds[0, var2_idx], 
+                    bounds[1, var2_idx]
+                )
+                point[var2_idx] = constrained_val
+                
+                # If constrained variable hit a bound, adjust the other variable
+                if constrained_val == bounds[0, var2_idx] or constrained_val == bounds[1, var2_idx]:
+                    adjusted_val = (rhs - coeff2 * constrained_val) / coeff1
+                    adjusted_val = torch.clamp(
+                        adjusted_val,
+                        bounds[0, var1_idx],
+                        bounds[1, var1_idx]
+                    )
+                    point[var1_idx] = adjusted_val
         
         points.append(point)
     
@@ -454,51 +409,52 @@ def compare_implementations(baybe_results, botorch_results):
     print(f"  BoTorch: {botorch_improvement:.6f}")
 
 def analyze_constraint_handling():
-    """Analyze how constraints are handled in both implementations."""
+    """Analyze how EQUALITY constraints are handled in both implementations."""
     print("\n" + "=" * 60)
-    print("Constraint Handling Analysis")
+    print("Linear EQUALITY Constraint Handling Analysis")
     print("=" * 60)
     
     print("""
-BayBE Constraint Handling:
---------------------------
-1. High-level API: Users define constraints using parameter names and coefficients
+BayBE Equality Constraint Handling:
+----------------------------------
+1. High-level API: Users define equality constraints using parameter names and coefficients
 2. Automatic conversion: BayBE automatically converts constraints to BoTorch format
 3. Integration: Constraints are seamlessly passed to BoTorch's optimize_acqf
 4. Validation: BayBE validates constraint feasibility during search space creation
 
-Example BayBE constraint:
-    ContinuousLinearInequalityConstraint(
-        parameters=["x1", "x2"], 
-        coefficients=[1.0, 1.0], 
-        rhs=1.5
+Example BayBE equality constraint:
+    ContinuousLinearEqualityConstraint(
+        parameters=["x1", "x6"], 
+        coefficients=[1.0, 2.0], 
+        rhs=1.0
     )
+    # Represents: x1 + 2*x6 = 1.0
 
-BoTorch Constraint Handling:
----------------------------
+BoTorch Equality Constraint Handling:
+------------------------------------
 1. Low-level API: Users must provide constraints as (indices, coefficients, rhs) tuples
 2. Manual conversion: Users must map parameter names to indices
-3. Direct integration: Constraints passed directly to optimize_acqf
+3. Direct integration: Constraints passed directly to optimize_acqf as equality_constraints
 4. Manual validation: Users responsible for ensuring constraint feasibility
 
-Example BoTorch constraint:
-    inequality_constraints = [(
-        torch.tensor([0, 1]),      # parameter indices
-        torch.tensor([1.0, 1.0]),  # coefficients  
-        1.5                        # rhs value
+Example BoTorch equality constraint:
+    equality_constraints = [(
+        torch.tensor([0, 5]),      # parameter indices for x1, x6
+        torch.tensor([1.0, 2.0]),  # coefficients  
+        1.0                        # rhs value (x1 + 2*x6 = 1.0)
     )]
 
-Key Differences:
----------------
+Key Differences for Equality Constraints:
+----------------------------------------
 1. Abstraction Level: BayBE provides higher-level abstractions
 2. Error Handling: BayBE has more built-in validation and error checking
-3. Usability: BayBE is more user-friendly for complex constraint definitions
-4. Flexibility: BoTorch provides more direct control over optimization details
-5. Performance: Both use the same underlying BoTorch optimization algorithms
+3. Manifold Optimization: Both use BoTorch's constraint-aware optimization on reduced manifolds
+4. Initial Point Generation: Both need to generate feasible starting points on constraint manifold
+5. Performance: Both use the same underlying BoTorch equality constraint algorithms
 
-Constraint Conversion Process:
------------------------------
-BayBE's to_botorch() method performs this conversion:
+Equality Constraint Conversion Process:
+--------------------------------------
+BayBE's to_botorch() method performs this conversion for equality constraints:
 
     def to_botorch(self, parameters, idx_offset=0):
         param_names = [p.name for p in parameters]
@@ -510,7 +466,15 @@ BayBE's to_botorch() method performs this conversion:
             self.rhs
         )
 
-This shows how BayBE abstracts away the index mapping complexity.
+Mathematical Challenge of Equality Constraints:
+----------------------------------------------
+Equality constraints reduce the dimensionality of the search space:
+- Original space: 6D cube [0,1]^6
+- With x1 + 2*x6 = 1.0: 5D manifold embedded in 6D space
+- With x2 + x3 = 0.5: 4D manifold embedded in 6D space
+- BoTorch handles this through constrained optimization algorithms
+
+This shows how BayBE abstracts away the index mapping and manifold projection complexity.
 """)
 
 # ============================================================================
@@ -541,29 +505,33 @@ def main():
     analyze_constraint_handling()
     
     print("\n" + "=" * 60)
-    print("Summary")
+    print("Summary: Linear EQUALITY Constraints")
     print("=" * 60)
     print("""
-This comparison demonstrates that:
+This comparison demonstrates equality constraint handling:
 
 1. **Same Underlying Engine**: Both BayBE and direct BoTorch use identical 
-   constraint-handling algorithms from BoTorch's optimize_acqf function.
+   equality constraint algorithms from BoTorch's optimize_acqf function.
 
 2. **Abstraction Benefits**: BayBE provides a more user-friendly interface
-   for defining and managing linear constraints.
+   for defining and managing linear EQUALITY constraints.
 
 3. **Equivalent Performance**: Since BayBE uses BoTorch internally, 
    performance should be very similar between both approaches.
 
 4. **Conversion Transparency**: BayBE's to_botorch() method provides a 
-   clear conversion from high-level constraints to BoTorch format.
+   clear conversion from high-level equality constraints to BoTorch format.
 
-5. **Constraint Validation**: Both approaches properly handle the "zero volume"
-   challenge by constraining optimization to the feasible manifold.
+5. **Manifold Optimization**: Both approaches properly handle the reduced 
+   dimensionality challenge by constraining optimization to the constraint manifold.
+
+6. **Mathematical Insight**: Equality constraints like x1 + 2*x6 = 1.0 and 
+   x2 + x3 = 0.5 reduce the 6D search space to a 4D manifold, which BoTorch
+   handles through specialized constraint-aware optimization algorithms.
 
 The key insight is that BayBE acts as a powerful abstraction layer over
-BoTorch, providing the same constraint-handling capabilities with a more
-intuitive interface.
+BoTorch, providing the same equality constraint capabilities with a more
+intuitive interface while maintaining full mathematical rigor.
 """)
 
 if __name__ == "__main__":

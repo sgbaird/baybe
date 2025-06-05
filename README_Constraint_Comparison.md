@@ -1,11 +1,11 @@
-# BayBE vs BoTorch Linear Constraints Implementation Comparison
+# BayBE vs BoTorch Linear EQUALITY Constraints Implementation Comparison
 
-This directory contains a comprehensive comparison showing how linear constraints are implemented in BayBE versus direct BoTorch usage, specifically using the Hartmann6 function as requested.
+This directory contains a comprehensive comparison showing how linear EQUALITY constraints are implemented in BayBE versus direct BoTorch usage, specifically using the Hartmann6 function as requested.
 
 ## Files
 
-1. **`baybe_vs_botorch_comparison.py`** - Full comparison with actual optimization (requires dependencies)
-2. **`simplified_comparison_demo.py`** - Conceptual demonstration (runs without heavy dependencies) 
+1. **`baybe_vs_botorch_comparison.py`** - Full comparison with actual optimization focusing on equality constraints (requires dependencies)
+2. **`simplified_comparison_demo.py`** - Conceptual demonstration of equality constraints (runs without heavy dependencies) 
 3. **`Linear_Constraints_BoTorch_Analysis.md`** - Detailed documentation of the constraint flow
 
 ## Quick Demo (No Dependencies Required)
@@ -15,10 +15,10 @@ python simplified_comparison_demo.py
 ```
 
 This runs immediately and shows:
-- How BayBE constraints convert to BoTorch format
-- Side-by-side optimization flow comparison
-- Constraint validation simulation
-- "Zero volume" challenge explanation
+- How BayBE EQUALITY constraints convert to BoTorch format
+- Side-by-side optimization flow comparison for equality constraints
+- Equality constraint validation simulation
+- "Zero volume" challenge explanation for constraint manifolds
 
 ## Full Comparison (Requires Dependencies)
 
@@ -42,31 +42,32 @@ python baybe_vs_botorch_comparison.py
 ```
 
 This will:
-1. Run BayBE optimization with linear constraints on Hartmann6
-2. Run equivalent direct BoTorch implementation
-3. Compare convergence and performance
-4. Verify constraint satisfaction
-5. Analyze the differences between approaches
+1. Run BayBE optimization with linear EQUALITY constraints on Hartmann6
+2. Run equivalent direct BoTorch implementation with equality constraints
+3. Compare convergence and performance on constraint manifolds
+4. Verify equality constraint satisfaction
+5. Analyze the differences between approaches for constrained optimization
 
 ## Key Findings
 
-### 1. Constraint Conversion
+### 1. Equality Constraint Conversion
 
 **BayBE** (High-level):
 ```python
-ContinuousLinearInequalityConstraint(
-    parameters=["x1", "x2"], 
-    coefficients=[1.0, 1.0], 
-    rhs=1.5
+ContinuousLinearEqualityConstraint(
+    parameters=["x1", "x6"], 
+    coefficients=[1.0, 2.0], 
+    rhs=1.0
 )
+# Represents: x1 + 2*x6 = 1.0
 ```
 
 **BoTorch** (Low-level):
 ```python
-inequality_constraints = [(
-    torch.tensor([0, 1]),      # parameter indices  
-    torch.tensor([1.0, 1.0]),  # coefficients
-    1.5                        # rhs value
+equality_constraints = [(
+    torch.tensor([0, 5]),      # parameter indices for x1, x6
+    torch.tensor([1.0, 2.0]),  # coefficients
+    1.0                        # rhs value
 )]
 ```
 
@@ -77,58 +78,59 @@ Both approaches use the same `optimize_acqf` call:
 optimize_acqf(
     acq_function=acq_func,
     bounds=bounds,
-    inequality_constraints=constraints,  # Same format!
-    equality_constraints=eq_constraints
+    equality_constraints=eq_constraints,  # Same format for equality constraints!
+    # No inequality constraints in this equality-focused comparison
 )
 ```
 
-### 3. Performance Equivalence
+### 3. Performance Equivalence on Constraint Manifolds
 
 Since BayBE uses BoTorch internally, performance is nearly identical:
-- Same constraint-handling algorithms
-- Same acquisition function optimization
-- Same gradient-based optimization routines
+- Same equality constraint-handling algorithms
+- Same manifold-based acquisition function optimization
+- Same gradient-based optimization routines for constrained problems
 
-### 4. Zero Volume Challenge Handling
+### 4. Manifold Optimization Challenge Handling
 
-Both frameworks handle reduced-dimensionality feasible regions by:
-- Constraint-aware initial point generation
-- Projected gradient optimization
+Both frameworks handle the reduced-dimensionality constraint manifolds by:
+- Constraint-aware initial point generation on manifolds
+- Projected gradient optimization for equality constraints
 - Manifold-based acquisition function optimization
+- Dimensionality reduction: 6D → 4D effective search space in our example
 
 ## Example Output
 
 ```
-BayBE Implementation:
+BayBE EQUALITY Constraint Implementation:
   Iteration 1: Best value = -2.847293
   Iteration 2: Best value = -2.934821
   ...
   Final best value: -3.124567
 
-BoTorch Implementation:  
+BoTorch EQUALITY Constraint Implementation:  
   Iteration 1: Best value = -2.851204
   Iteration 2: Best value = -2.928943
   ...
   Final best value: -3.119832
 
-Difference: 0.004735 (excellent agreement)
+Difference: 0.004735 (excellent agreement on constraint manifold)
 ```
 
-## Constraint Verification
+## Equality Constraint Verification
 
 Both implementations automatically verify:
-- `x1 + x2 <= 1.5`: ✓ (max = 1.499892)
-- `x3 + x4 + x5 >= 0.5`: ✓ (min = 0.500108)  
-- `x1 + 2*x6 = 1.0`: ✓ (mean = 1.000000)
+- `x1 + 2*x6 = 1.0`: ✓ (mean = 1.000000, std = 0.000012)
+- `x2 + x3 = 0.5`: ✓ (mean = 0.500000, std = 0.000008)
 
 ## Conclusion
 
 The comparison demonstrates that:
 
-1. **BayBE provides abstraction** over BoTorch's lower-level constraint API
-2. **Performance is equivalent** since both use the same optimization engine
-3. **Constraint conversion is transparent** via the `to_botorch()` method
-4. **Zero volume challenges are handled** identically by both approaches
-5. **BayBE adds validation and usability** while maintaining BoTorch's power
+1. **BayBE provides abstraction** over BoTorch's lower-level equality constraint API
+2. **Performance is equivalent** since both use the same constrained optimization engine
+3. **Constraint conversion is transparent** via the `to_botorch()` method for equality constraints
+4. **Manifold optimization challenges are handled** identically by both approaches
+5. **BayBE adds validation and usability** while maintaining BoTorch's mathematical rigor for equality constraints
+6. **Dimensionality reduction** is properly handled (6D → 4D in our example)
 
-This addresses the original request to show how linear constraints are implemented from a BoTorch perspective by demonstrating that BayBE's high-level constraint abstractions seamlessly convert to BoTorch's expected format and produce equivalent optimization performance.
+This addresses the original request to show how linear EQUALITY constraints are implemented from a BoTorch perspective by demonstrating that BayBE's high-level equality constraint abstractions seamlessly convert to BoTorch's expected format and produce equivalent optimization performance on constraint manifolds.

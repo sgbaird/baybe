@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Simplified BayBE vs BoTorch Constraint Implementation Demo
-==========================================================
+Simplified BayBE vs BoTorch LINEAR EQUALITY Constraint Implementation Demo
+=========================================================================
 
-This script demonstrates the key concepts of how linear constraints are
+This script demonstrates the key concepts of how linear EQUALITY constraints are
 implemented in BayBE versus direct BoTorch, using minimal dependencies.
 
 To run the full comparison with actual optimization, install dependencies:
@@ -33,43 +33,68 @@ class MockHartmann6:
 
 
 def demonstrate_constraint_conversion():
-    """Show how BayBE constraints convert to BoTorch format."""
+    """Show how BayBE EQUALITY constraints convert to BoTorch format."""
     print("=" * 60)
-    print("Constraint Conversion Demonstration")
+    print("Linear EQUALITY Constraint Conversion Demonstration")
     print("=" * 60)
     
-    # Simulate BayBE constraint definition
-    print("1. BayBE Constraint Definition:")
-    print("   ContinuousLinearInequalityConstraint(")
-    print("       parameters=['x1', 'x2'],")
-    print("       coefficients=[1.0, 1.0],")
-    print("       rhs=1.5")
+    # Simulate BayBE equality constraint definition
+    print("1. BayBE EQUALITY Constraint Definition:")
+    print("   ContinuousLinearEqualityConstraint(")
+    print("       parameters=['x1', 'x6'],")
+    print("       coefficients=[1.0, 2.0],")
+    print("       rhs=1.0")
     print("   )")
-    print("   # Represents: x1 + x2 >= 1.5")
+    print("   # Represents: x1 + 2*x6 = 1.0")
     
-    # Simulate parameter mapping
+    print("\n   ContinuousLinearEqualityConstraint(")
+    print("       parameters=['x2', 'x3'],")
+    print("       coefficients=[1.0, 1.0],")
+    print("       rhs=0.5")
+    print("   )")
+    print("   # Represents: x2 + x3 = 0.5")
+    
+    # Simulate parameter mapping for equality constraints
     parameter_names = ['x1', 'x2', 'x3', 'x4', 'x5', 'x6']
-    constraint_params = ['x1', 'x2']
-    constraint_coeffs = [1.0, 1.0]
-    constraint_rhs = 1.5
+    
+    # Constraint 1: x1 + 2*x6 = 1.0
+    constraint1_params = ['x1', 'x6']
+    constraint1_coeffs = [1.0, 2.0]
+    constraint1_rhs = 1.0
+    
+    # Constraint 2: x2 + x3 = 0.5
+    constraint2_params = ['x2', 'x3']
+    constraint2_coeffs = [1.0, 1.0]
+    constraint2_rhs = 0.5
     
     # Convert to BoTorch format (what BayBE's to_botorch() does)
-    param_indices = [parameter_names.index(p) for p in constraint_params]
+    constraint1_indices = [parameter_names.index(p) for p in constraint1_params]
+    constraint2_indices = [parameter_names.index(p) for p in constraint2_params]
     
     print("\n2. BayBE's Automatic Conversion to BoTorch Format:")
     print(f"   param_names = {parameter_names}")
-    print(f"   constraint_params = {constraint_params}")
-    print(f"   -> param_indices = {param_indices}")
-    print(f"   -> BoTorch format: ({param_indices}, {constraint_coeffs}, {constraint_rhs})")
+    print(f"   ")
+    print(f"   Constraint 1: {constraint1_params} -> indices {constraint1_indices}")
+    print(f"   -> BoTorch format: ({constraint1_indices}, {constraint1_coeffs}, {constraint1_rhs})")
+    print(f"   ")
+    print(f"   Constraint 2: {constraint2_params} -> indices {constraint2_indices}")
+    print(f"   -> BoTorch format: ({constraint2_indices}, {constraint2_coeffs}, {constraint2_rhs})")
     
-    print("\n3. Direct BoTorch Constraint Definition:")
-    print("   inequality_constraints = [(")
-    print(f"       torch.tensor({param_indices}),  # parameter indices")
-    print(f"       torch.tensor({constraint_coeffs}),  # coefficients")
-    print(f"       {constraint_rhs}  # rhs value")
-    print("   )]")
+    print("\n3. Direct BoTorch EQUALITY Constraint Definition:")
+    print("   equality_constraints = [")
+    print("       (")
+    print(f"           torch.tensor({constraint1_indices}),  # indices for x1, x6")
+    print(f"           torch.tensor({constraint1_coeffs}),  # coefficients")
+    print(f"           {constraint1_rhs}  # x1 + 2*x6 = 1.0")
+    print("       ),")
+    print("       (")
+    print(f"           torch.tensor({constraint2_indices}),  # indices for x2, x3")
+    print(f"           torch.tensor({constraint2_coeffs}),  # coefficients")
+    print(f"           {constraint2_rhs}  # x2 + x3 = 0.5")
+    print("       )")
+    print("   ]")
     
-    return param_indices, constraint_coeffs, constraint_rhs
+    return (constraint1_indices, constraint1_coeffs, constraint1_rhs), (constraint2_indices, constraint2_coeffs, constraint2_rhs)
 
 
 def demonstrate_optimization_flow():
@@ -95,64 +120,72 @@ def demonstrate_optimization_flow():
     print("4. candidates, _ = optimize_acqf(")
     print("       acq_function=acq_func,")
     print("       bounds=bounds,")
-    print("       inequality_constraints=constraints,  # Manual definition")
-    print("       equality_constraints=eq_constraints")
+    print("       equality_constraints=eq_constraints,  # Manual equality constraint definition")
+    print("       # Note: no inequality constraints for this equality-focused demo")
     print("   )")
     print("5. new_Y = hartmann_func(candidates)")
     print("6. train_X = torch.cat([train_X, candidates])")
     
     print("\n" + "=" * 40)
-    print("Key Insight: Same optimize_acqf Call")
+    print("Key Insight: Same optimize_acqf Call for EQUALITY Constraints")
     print("=" * 40)
     print("Both approaches ultimately call BoTorch's optimize_acqf with:")
-    print("- Same constraint format: (indices, coefficients, rhs)")
-    print("- Same acquisition function optimization")
-    print("- Same constraint handling algorithms")
-    print("- BayBE just provides a higher-level interface")
+    print("- Same equality constraint format: (indices, coefficients, rhs)")
+    print("- Same acquisition function optimization on constraint manifold")
+    print("- Same constraint handling algorithms for reduced dimensionality")
+    print("- BayBE just provides a higher-level interface for equality constraints")
 
 
 def simulate_constraint_validation():
-    """Simulate constraint validation on generated points."""
+    """Simulate EQUALITY constraint validation on generated points."""
     print("\n" + "=" * 60)
-    print("Constraint Validation Simulation")
+    print("Equality Constraint Validation Simulation")
     print("=" * 60)
     
     # Generate some mock optimization points
     np.random.seed(42)
     mock_points = np.random.rand(15, 6)  # 15 points, 6 dimensions
     
-    # Apply constraints to make points feasible
-    # Constraint 1: x1 + x2 >= 1.5 (modify points to satisfy this)
-    for i in range(len(mock_points)):
-        if mock_points[i, 0] + mock_points[i, 1] < 1.5:
-            # Adjust x2 to satisfy constraint
-            mock_points[i, 1] = 1.5 - mock_points[i, 0] + 0.1
-            if mock_points[i, 1] > 1.0:  # Ensure within bounds
-                mock_points[i, 1] = 1.0
-                mock_points[i, 0] = 0.5  # Adjust x1 instead
-    
-    # Constraint 2: x1 + 2*x6 = 1.0 (equality constraint)
+    # Apply EQUALITY constraints to make points feasible
+    # Constraint 1: x1 + 2*x6 = 1.0 (solve for x6)
     for i in range(len(mock_points)):
         # Solve for x6: x6 = (1.0 - x1) / 2.0
         mock_points[i, 5] = (1.0 - mock_points[i, 0]) / 2.0
         # Clamp to bounds [0, 1]
         mock_points[i, 5] = np.clip(mock_points[i, 5], 0, 1)
+        # If x6 was clamped, adjust x1 to maintain constraint
+        if mock_points[i, 5] == 0 or mock_points[i, 5] == 1:
+            mock_points[i, 0] = 1.0 - 2.0 * mock_points[i, 5]
+            mock_points[i, 0] = np.clip(mock_points[i, 0], 0, 1)
     
-    print("Generated 15 mock optimization points")
-    print("\nConstraint Validation:")
-    print("---------------------")
+    # Constraint 2: x2 + x3 = 0.5 (solve for x3)
+    for i in range(len(mock_points)):
+        # Solve for x3: x3 = 0.5 - x2
+        mock_points[i, 2] = 0.5 - mock_points[i, 1]
+        # Clamp to bounds [0, 1]
+        mock_points[i, 2] = np.clip(mock_points[i, 2], 0, 1)
+        # If x3 was clamped, adjust x2 to maintain constraint
+        if mock_points[i, 2] == 0 or mock_points[i, 2] == 1:
+            mock_points[i, 1] = 0.5 - mock_points[i, 2]
+            mock_points[i, 1] = np.clip(mock_points[i, 1], 0, 1)
     
-    # Validate constraint 1: x1 + x2 >= 1.5
-    constraint1_values = mock_points[:, 0] + mock_points[:, 1]
-    constraint1_satisfied = np.all(constraint1_values >= 1.5 - 1e-6)
-    print(f"Constraint 1 (x1 + x2 >= 1.5): {constraint1_satisfied}")
-    print(f"  Min value: {constraint1_values.min():.6f}")
+    print("Generated 15 mock optimization points with EQUALITY constraints")
+    print("\nEquality Constraint Validation:")
+    print("------------------------------")
+    
+    # Validate constraint 1: x1 + 2*x6 = 1.0
+    constraint1_values = mock_points[:, 0] + 2 * mock_points[:, 5]
+    constraint1_satisfied = np.allclose(constraint1_values, 1.0, atol=1e-3)
+    print(f"Constraint 1 (x1 + 2*x6 = 1.0): {constraint1_satisfied}")
+    print(f"  Target value: 1.0")
     print(f"  Mean value: {constraint1_values.mean():.6f}")
+    print(f"  Std deviation: {constraint1_values.std():.6f}")
     
-    # Validate constraint 2: x1 + 2*x6 = 1.0
-    constraint2_values = mock_points[:, 0] + 2 * mock_points[:, 5]
-    constraint2_satisfied = np.allclose(constraint2_values, 1.0, atol=1e-3)
-    print(f"Constraint 2 (x1 + 2*x6 = 1.0): {constraint2_satisfied}")
+    # Validate constraint 2: x2 + x3 = 0.5
+    constraint2_values = mock_points[:, 1] + mock_points[:, 2]
+    constraint2_satisfied = np.allclose(constraint2_values, 0.5, atol=1e-3)
+    print(f"Constraint 2 (x2 + x3 = 0.5): {constraint2_satisfied}")
+    print(f"  Target value: 0.5")
     print(f"  Mean value: {constraint2_values.mean():.6f}")
     print(f"  Std deviation: {constraint2_values.std():.6f}")
     
@@ -163,30 +196,31 @@ def simulate_constraint_validation():
     print(f"\nFunction Evaluation Results:")
     print(f"  Best value found: {np.min(function_values):.6f}")
     print(f"  Mean value: {np.mean(function_values):.6f}")
-    print(f"  All points satisfy constraints: {constraint1_satisfied and constraint2_satisfied}")
+    print(f"  All equality constraints satisfied: {constraint1_satisfied and constraint2_satisfied}")
     
     return mock_points, function_values
 
 
 def analyze_zero_volume_challenge():
-    """Explain how the 'zero volume' challenge is addressed."""
+    """Explain how the 'zero volume' challenge is addressed for EQUALITY constraints."""
     print("\n" + "=" * 60)
-    print("'Zero Volume' Challenge Analysis")
+    print("'Zero Volume' Challenge Analysis for Equality Constraints")
     print("=" * 60)
     
     print("""
-The "Zero Volume" Challenge:
----------------------------
-When linear constraints reduce the effective dimensionality of the search space,
-the feasible region may have "zero volume" in the full-dimensional space.
+The "Zero Volume" Challenge with Equality Constraints:
+-----------------------------------------------------
+When linear EQUALITY constraints are imposed, they reduce the effective dimensionality 
+of the search space, creating manifolds with "zero volume" in the full-dimensional space.
 
-Example: Constraint x1 + x2 + x3 = 1.0 in a 3D space [0,1]³
-- The feasible region is a 2D triangle embedded in 3D space
-- This triangle has zero volume in the 3D sense
-- But it has non-zero area in the 2D constraint manifold
+Example with Our Constraints:
+- Original space: 6D cube [0,1]⁶
+- Constraint 1: x1 + 2*x6 = 1.0 → reduces to 5D manifold
+- Constraint 2: x2 + x3 = 0.5 → further reduces to 4D manifold
+- Result: 4D manifold embedded in 6D space (zero volume in 6D sense)
 
-How BoTorch Handles This:
-------------------------
+How BoTorch Handles Equality Constraints:
+----------------------------------------
 1. **Constraint-Aware Sampling**: Initial points are generated on the constraint manifold
 2. **Projected Gradients**: Optimization gradients are projected to respect constraints  
 3. **Manifold Optimization**: Acquisition function optimization occurs on the feasible manifold
@@ -204,25 +238,29 @@ Example Implementation Details:
 ------------------------------
 """)
     
-    # Show a concrete example
-    print("For constraint x1 + x2 = 1.0:")
-    print("- BoTorch generates points where x2 = 1.0 - x1")
-    print("- This reduces the 2D problem to 1D optimization over x1")
-    print("- The effective search space becomes the line segment from (0,1) to (1,0)")
-    print("- Acquisition function is optimized along this 1D manifold")
+    # Show concrete examples with equality constraints
+    print("For our equality constraints:")
+    print("- Constraint x1 + 2*x6 = 1.0:")
+    print("  * BoTorch generates points where x6 = (1.0 - x1) / 2.0")
+    print("  * This eliminates one degree of freedom")
+    print("- Constraint x2 + x3 = 0.5:")
+    print("  * BoTorch generates points where x3 = 0.5 - x2")
+    print("  * This eliminates another degree of freedom")
+    print("- Result: 6D → 4D effective optimization space")
+    print("- Acquisition function is optimized on this 4D constraint manifold")
     
     print("\nBoth BayBE and direct BoTorch use the same underlying algorithms:")
+    print("- Constraint-aware optimization algorithms")
+    print("- Manifold-based gradient projections for equality constraints")
+    print("- Feasible point generation on constraint manifolds")
     print("- L-BFGS-B with constraint projections")
-    print("- Sequential quadratic programming (SQP)")
-    print("- Interior point methods for inequality constraints")
-    print("- Constraint-aware initial point generation")
 
 
 def main():
-    """Main demonstration function."""
-    print("Simplified BayBE vs BoTorch Constraint Demo")
+    """Main demonstration function for EQUALITY constraints."""
+    print("Simplified BayBE vs BoTorch LINEAR EQUALITY Constraint Demo")
     print("=" * 60)
-    print("This demo shows key concepts without requiring full dependencies")
+    print("This demo shows key concepts for EQUALITY constraints without requiring full dependencies")
     
     # Core demonstrations
     demonstrate_constraint_conversion()
@@ -231,25 +269,28 @@ def main():
     analyze_zero_volume_challenge()
     
     print("\n" + "=" * 60)
-    print("Key Takeaways")
+    print("Key Takeaways: Linear EQUALITY Constraints")
     print("=" * 60)
     print("""
 1. **Identical Core Engine**: BayBE uses BoTorch's optimize_acqf internally,
-   so constraint handling performance is identical.
+   so EQUALITY constraint handling performance is identical.
 
-2. **Abstraction Layer**: BayBE provides user-friendly constraint definitions
+2. **Abstraction Layer**: BayBE provides user-friendly equality constraint definitions
    that automatically convert to BoTorch's lower-level format.
 
 3. **Transparent Conversion**: The to_botorch() method clearly shows how
-   high-level constraints map to (indices, coefficients, rhs) tuples.
+   high-level equality constraints map to (indices, coefficients, rhs) tuples.
 
-4. **Zero Volume Handling**: Both approaches use BoTorch's constraint-aware
-   optimization to handle reduced-dimensionality feasible regions.
+4. **Manifold Optimization**: Both approaches use BoTorch's constraint-aware
+   optimization to handle the reduced-dimensionality constraint manifolds.
 
 5. **Validation Benefits**: BayBE adds extra validation and error checking
-   on top of BoTorch's core functionality.
+   on top of BoTorch's core equality constraint functionality.
 
-To see the actual optimization comparison with Hartmann6:
+6. **Dimensionality Reduction**: Equality constraints reduce the effective
+   search space dimensionality (6D → 4D in our example).
+
+To see the actual EQUALITY constraint optimization comparison with Hartmann6:
 1. Install dependencies: pip install torch botorch gpytorch
 2. Install BayBE: pip install -e .
 3. Run: python baybe_vs_botorch_comparison.py
